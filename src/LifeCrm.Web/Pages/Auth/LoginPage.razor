@@ -1,0 +1,58 @@
+@page "/login"
+@inject ApiClient Api
+@inject AppState AppState
+@inject NavigationManager Nav
+@inject SignalRService SignalR
+
+<MudGrid Justify="Justify.Center" Class="mt-8">
+    <MudItem xs="12" sm="6" md="4">
+        <MudCard Elevation="4">
+            <MudCardContent Class="pa-6">
+                <MudStack AlignItems="AlignItems.Center" Class="mb-5">
+                    <MudIcon Icon="@Icons.Material.Filled.Favorite" Color="Color.Primary" Style="font-size:3rem;" />
+                    <MudText Typo="Typo.h4">LifeCrm</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Logga in för att fortsätta</MudText>
+                </MudStack>
+                @if (!string.IsNullOrEmpty(_error))
+                {
+                    <MudAlert Severity="Severity.Error" Class="mb-4" Dense="true">@_error</MudAlert>
+                }
+                <MudTextField @bind-Value="_email" Label="E-post" InputType="InputType.Email" Variant="Variant.Outlined"
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Email" Class="mb-3" Disabled="_loading" />
+                <MudTextField @bind-Value="_password" Label="Lösenord"
+                              InputType="@(_showPw ? InputType.Text : InputType.Password)"
+                              Variant="Variant.Outlined" Adornment="Adornment.End"
+                              AdornmentIcon="@(_showPw ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                              OnAdornmentClick="@(() => _showPw = !_showPw)" Class="mb-5" Disabled="_loading" OnKeyDown="OnKeyDown" />
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Size="Size.Large"
+                           OnClick="LoginAsync" Disabled="_loading">
+                    @if (_loading) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /><span>Loggar in…</span> }
+                    else { <span>Logga in</span> }
+                </MudButton>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private string _email = string.Empty, _password = string.Empty;
+    private bool   _loading, _showPw;
+    private string? _error;
+
+    private async Task OnKeyDown(KeyboardEventArgs e) { if (e.Key == "Enter") await LoginAsync(); }
+
+    private async Task LoginAsync()
+    {
+        _loading = true; _error = null;
+        var result = await Api.LoginAsync(new LoginRequest { Email = _email, Password = _password });
+        if (result.Success && result.Data is not null)
+        {
+            await Api.SaveTokenAsync(result.Data.Token);
+            AppState.SetUser(result.Data);
+            await SignalR.ConnectAsync("https://localhost:59152", result.Data.Token, result.Data.OrganizationId);
+            Nav.NavigateTo("/");
+        }
+        else { _error = result.Errors.FirstOrDefault() ?? "Inloggning misslyckades."; }
+        _loading = false;
+    }
+}

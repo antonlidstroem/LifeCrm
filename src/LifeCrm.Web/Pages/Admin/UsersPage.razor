@@ -1,0 +1,102 @@
+@page "/admin/users"
+@inject ApiClient Api
+@inject AppState AppState
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+@if (!AppState.IsAdmin)
+{
+    <MudAlert Severity="Severity.Error" Class="mt-4">Du har inte behörighet att se den här sidan.</MudAlert>
+}
+else
+{
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudText Typo="Typo.h4">Användare</MudText>
+    <MudSpacer />
+    <MudText Typo="Typo.body2" Color="Color.Secondary">@AppState.OrganizationName</MudText>
+</MudStack>
+
+@if (_loading) { <LoadingSkeleton Rows="6" /> }
+else if (!_users.Any()) { <EmptyState Title="Inga användare hittades" Icon="@Icons.Material.Outlined.ManageAccounts" Description="Det finns inga användare i din organisation än." /> }
+else
+{
+    <MudTable T="UserSummaryDto" Items="_users" Hover="true" Dense="true" Elevation="2">
+        <HeaderContent>
+            <MudTh>Namn</MudTh><MudTh>E-post</MudTh><MudTh>Roll</MudTh><MudTh>Status</MudTh><MudTh>Senast inloggad</MudTh><MudTh Style="width:120px"></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudAvatar Color="Color.Primary" Size="Size.Small">@context.FullName[0]</MudAvatar>
+                    <MudText>@context.FullName</MudText>
+                </MudStack>
+            </MudTd>
+            <MudTd>@context.Email</MudTd>
+            <MudTd>
+                <MudSelect T="UserRole" Value="context.Role" ValueChanged="@(r => ChangeRole(context, r))"
+                           Variant="Variant.Text" Dense="true" Margin="Margin.Dense" Style="min-width:120px">
+                    @foreach (UserRole r in Enum.GetValues<UserRole>())
+                    { <MudSelectItem Value="r">@r</MudSelectItem> }
+                </MudSelect>
+            </MudTd>
+            <MudTd>
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="@(context.IsActive ? Color.Success : Color.Default)">
+                    @(context.IsActive ? "Aktiv" : "Inaktiv")
+                </MudChip>
+            </MudTd>
+            <MudTd>@(context.LastLoginAt?.ToString("yyyy-MM-dd HH:mm") ?? "—")</MudTd>
+            <MudTd Style="white-space:nowrap">
+                @if (context.Id.ToString() != AppState.UserId)
+                {
+                    @if (context.IsActive)
+                    { <MudTooltip Text="Inaktivera"><MudIconButton Icon="@Icons.Material.Filled.PersonOff" Size="Size.Small" Color="Color.Warning" OnClick="@(() => ToggleActive(context, false))" /></MudTooltip> }
+                    else
+                    { <MudTooltip Text="Aktivera"><MudIconButton Icon="@Icons.Material.Filled.PersonAdd" Size="Size.Small" Color="Color.Success" OnClick="@(() => ToggleActive(context, true))" /></MudTooltip> }
+                }
+                else { <MudText Typo="Typo.caption" Color="Color.Secondary">(du)</MudText> }
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+} @* end @if (AppState.IsAdmin) *@
+
+@code {
+    private IReadOnlyList<UserSummaryDto> _users   = Array.Empty<UserSummaryDto>();
+    private bool                          _loading = true;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        var res = await Api.GetUsersAsync();
+        _users  = res.Data ?? Array.Empty<UserSummaryDto>();
+        _loading = false;
+    }
+
+    private async Task ChangeRole(UserSummaryDto user, UserRole newRole)
+    {
+        if (user.Role == newRole) return;
+        var res = await Api.ChangeUserRoleAsync(user.Id, newRole);
+        if (res.Success) { Snackbar.Add($"{user.FullName}s roll ändrad till {newRole}.", Severity.Success); await LoadAsync(); }
+        else Snackbar.Add(res.Errors.FirstOrDefault() ?? "Fel.", Severity.Error);
+    }
+
+    private async Task ToggleActive(UserSummaryDto user, bool activate)
+    {
+        var p = new DialogParameters
+        {
+            ["Title"]        = activate ? "Aktivera användare" : "Inaktivera användare",
+            ["Message"]      = activate ? $"Aktivera {user.FullName}?" : $"Inaktivera {user.FullName}?",
+            ["ConfirmText"]  = activate ? "Aktivera" : "Inaktivera",
+            ["ConfirmColor"] = activate ? Color.Success : Color.Warning
+        };
+        var confirm = DialogService.Show<ConfirmDialog>("", p);
+        if ((await confirm.Result).Canceled) return;
+        var res = activate ? await Api.ActivateUserAsync(user.Id) : await Api.DeactivateUserAsync(user.Id);
+        if (res.Success) { Snackbar.Add(activate ? "Aktiverad." : "Inaktiverad.", Severity.Success); await LoadAsync(); }
+        else Snackbar.Add(res.Errors.FirstOrDefault() ?? "Fel.", Severity.Error);
+    }
+}

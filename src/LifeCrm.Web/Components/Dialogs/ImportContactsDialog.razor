@@ -1,0 +1,49 @@
+@inject ApiClient Api
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent><MudText Typo="Typo.h6"><MudIcon Icon="@Icons.Material.Filled.Upload" Class="mr-2 mb-n1" />Importera kontakter</MudText></TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-3">Ladda upp en CSV-fil (max 5 MB). Kolumnen <strong>Name</strong> är obligatorisk.</MudText>
+        <MudFileUpload T="IBrowserFile" FilesChanged="OnFileSelected" Accept=".csv" MaximumFileCount="1">
+            <ActivatorContent>
+                <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.AttachFile">@(_file is null ? "Välj CSV-fil" : _file.Name)</MudButton>
+            </ActivatorContent>
+        </MudFileUpload>
+        @if (_result is not null)
+        {
+            <MudAlert Severity="Severity.Success" Class="mt-3">
+                @_result.SuccessCount kontakter importerades.
+                @if (_result.ErrorCount > 0) { <text> @_result.ErrorCount rader hoppades över.</text> }
+            </MudAlert>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Variant="Variant.Text">Avbryt</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Upload" Disabled="@(_file is null || _uploading)">@(_uploading ? "Importerar…" : "Importera")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; } = default!;
+    private IBrowserFile? _file;
+    private bool _uploading;
+    private ImportContactsResult? _result;
+
+    private void OnFileSelected(IBrowserFile file) => _file = file;
+
+    private async Task Upload()
+    {
+        if (_file is null) return;
+        _uploading = true;
+        try
+        {
+            await using var stream = _file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+            var res = await Api.ImportContactsCsvAsync(stream, _file.Name);
+            if (res.Success) { _result = res.Data; Snackbar.Add($"Import klar: {_result?.SuccessCount} tillagda.", Severity.Success); MudDialog.Close(DialogResult.Ok(true)); }
+            else Snackbar.Add(res.Errors.FirstOrDefault() ?? "Import misslyckades.", Severity.Error);
+        }
+        finally { _uploading = false; }
+    }
+    private void Cancel() => MudDialog.Cancel();
+}

@@ -1,0 +1,130 @@
+@using LifeCrm.Web.Services
+@inherits LayoutComponentBase
+@inject AppState AppState
+@inject NavigationManager Nav
+@inject SignalRService SignalR
+@implements IDisposable
+
+<MudThemeProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+@if (!AppState.IsAuthenticated)
+{
+    <LifeCrm.Web.Pages.Auth.LoginPage />
+}
+else
+{
+    <MudLayout>
+        <MudAppBar Elevation="1">
+            <MudText Typo="Typo.h6" Class="mr-4">LifeCrm</MudText>
+            <MudSpacer />
+            @if (_unreadActivity > 0)
+            {
+                <MudBadge Content="@_unreadActivity" Color="Color.Error" Overlap="true" Class="mr-1">
+                    <MudIconButton Icon="@Icons.Material.Filled.Notifications" Color="Color.Inherit" OnClick="ToggleActivityDrawer" />
+                </MudBadge>
+            }
+            else
+            {
+                <MudIconButton Icon="@Icons.Material.Outlined.Notifications" Color="Color.Inherit" OnClick="ToggleActivityDrawer" />
+            }
+            <MudButton Color="Color.Inherit" StartIcon="@Icons.Material.Filled.AccountCircle" Href="/account">
+                @AppState.UserFullName
+            </MudButton>
+        </MudAppBar>
+
+        <MudDrawer Open="true" Variant="DrawerVariant.Persistent" Elevation="2">
+            <MudDrawerHeader>
+                <MudText Typo="Typo.subtitle2" Color="Color.Secondary">@AppState.OrganizationName</MudText>
+            </MudDrawerHeader>
+            <MudNavMenu>
+                <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">Dashboard</MudNavLink>
+                <MudNavLink Href="/contacts"  Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.People">Kontakter</MudNavLink>
+                <MudNavLink Href="/donations" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.AttachMoney">Gåvor</MudNavLink>
+                <MudNavLink Href="/campaigns" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Campaign">Kampanjer</MudNavLink>
+                <MudNavLink Href="/projects"  Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.FolderOpen">Projekt</MudNavLink>
+                @if (AppState.IsAdmin)
+                {
+                    <MudDivider Class="my-2" />
+                    <MudNavLink Href="/admin/users" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.ManageAccounts">Användare</MudNavLink>
+                }
+                <MudDivider Class="my-2" />
+                <MudNavLink Href="/account" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.AccountCircle">Mitt konto</MudNavLink>
+                <MudNavLink Icon="@Icons.Material.Filled.Logout" OnClick="Logout">Logga ut</MudNavLink>
+            </MudNavMenu>
+        </MudDrawer>
+
+        <MudDrawer @bind-Open="_activityOpen" Anchor="Anchor.End" Variant="DrawerVariant.Temporary" Width="320px" Elevation="2">
+            <MudDrawerHeader>
+                <MudText Typo="Typo.h6">Aktivitetsfeed</MudText>
+                <MudSpacer />
+                <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="ToggleActivityDrawer" />
+            </MudDrawerHeader>
+            @if (_activityFeed.Count == 0)
+            {
+                <EmptyState Title="Ingen aktivitet ännu" Description="Händelser visas här i realtid." Icon="@Icons.Material.Outlined.NotificationsNone" />
+            }
+            else
+            {
+                <MudList T="string" Dense="true">
+                    @foreach (var item in _activityFeed)
+                    {
+                        <MudListItem>
+                            <MudStack Spacing="0">
+                                <MudText Typo="Typo.body2">@item.Message</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">@item.Time.ToString("HH:mm")</MudText>
+                            </MudStack>
+                        </MudListItem>
+                        <MudDivider />
+                    }
+                </MudList>
+            }
+        </MudDrawer>
+
+        <MudMainContent>
+            <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4 pb-8">@Body</MudContainer>
+        </MudMainContent>
+    </MudLayout>
+}
+
+@code {
+    private bool _activityOpen;
+    private int  _unreadActivity;
+    private readonly List<FeedItem> _activityFeed = new();
+
+    protected override void OnInitialized()
+    {
+        AppState.StateChanged += OnStateChanged;
+        SignalR.OnActivity    += OnActivityReceived;
+    }
+
+    private void OnStateChanged() => InvokeAsync(StateHasChanged);
+
+    private async Task OnActivityReceived(ActivityEvent evt)
+    {
+        var message = evt.EventType switch
+        {
+            "ContactCreated"    => "Ny kontakt skapades",
+            "DonationCreated"   => "Ny gåva registrerades",
+            "InteractionLogged" => "Interaktion loggades",
+            _                   => evt.EventType
+        };
+        _activityFeed.Insert(0, new FeedItem(message, DateTime.Now));
+        if (_activityFeed.Count > 50) _activityFeed.RemoveAt(50);
+        if (!_activityOpen) _unreadActivity++;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void ToggleActivityDrawer() { _activityOpen = !_activityOpen; _unreadActivity = 0; }
+
+    private async Task Logout()
+    {
+        await SignalR.DisconnectAsync();
+        AppState.ClearUser();
+        Nav.NavigateTo("/");
+    }
+
+    public void Dispose() { AppState.StateChanged -= OnStateChanged; SignalR.OnActivity -= OnActivityReceived; }
+    private record FeedItem(string Message, DateTime Time);
+}

@@ -1,0 +1,66 @@
+@inject ApiClient Api
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent><MudText Typo="Typo.h6"><MudIcon Icon="@Icons.Material.Filled.Campaign" Class="mr-2 mb-n1" />@(_isEdit ? "Redigera kampanj" : "Ny kampanj")</MudText></TitleContent>
+    <DialogContent>
+        <MudGrid Spacing="2">
+            <MudItem xs="12"><MudTextField @bind-Value="_name" Label="Namn *" Variant="Variant.Outlined" Required="true" /></MudItem>
+            <MudItem xs="12"><MudTextField @bind-Value="_description" Label="Beskrivning" Variant="Variant.Outlined" Lines="3" /></MudItem>
+            <MudItem xs="12" sm="6"><MudNumericField @bind-Value="_budgetGoal" Label="Mål (belopp)" Variant="Variant.Outlined" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.AttachMoney" HideSpinButtons="true" Min="0m" /></MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="string" @bind-Value="_status" Label="Status" Variant="Variant.Outlined">
+                    <MudSelectItem Value="@("Draft")">Utkast</MudSelectItem><MudSelectItem Value="@("Active")">Aktiv</MudSelectItem><MudSelectItem Value="@("Paused")">Pausad</MudSelectItem><MudSelectItem Value="@("Completed")">Avslutad</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6"><MudDatePicker @bind-Date="_startDate" Label="Startdatum" Variant="Variant.Outlined" Editable="true" Clearable="true" /></MudItem>
+            <MudItem xs="12" sm="6"><MudDatePicker @bind-Date="_endDate" Label="Slutdatum" Variant="Variant.Outlined" Editable="true" Clearable="true" /></MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Variant="Variant.Text">Avbryt</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit" Disabled="_saving">@(_saving ? "Sparar…" : (_isEdit ? "Spara" : "Skapa"))</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public Guid? CampaignId { get; set; }
+    private bool _isEdit, _saving;
+    private string _name = string.Empty, _description = string.Empty, _status = "Draft";
+    private decimal? _budgetGoal;
+    private DateTime? _startDate, _endDate;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _isEdit = CampaignId.HasValue;
+        if (!_isEdit) return;
+        var res = await Api.GetCampaignAsync(CampaignId!.Value);
+        if (res.Data is null) return;
+        var c = res.Data; _name = c.Name; _description = c.Description ?? string.Empty; _budgetGoal = c.BudgetGoal; _status = c.Status.ToString();
+        _startDate = c.StartDate?.ToDateTime(TimeOnly.MinValue); _endDate = c.EndDate?.ToDateTime(TimeOnly.MinValue);
+    }
+
+    private async Task Submit()
+    {
+        if (string.IsNullOrWhiteSpace(_name)) { Snackbar.Add("Namn är obligatoriskt.", Severity.Warning); return; }
+        _saving = true;
+        try
+        {
+            if (_isEdit)
+            {
+                var req = new UpdateCampaignRequest { Id = CampaignId!.Value, Name = _name, Description = _description.NullIfEmpty(), BudgetGoal = _budgetGoal > 0 ? _budgetGoal : null, Status = Enum.Parse<CampaignStatus>(_status), StartDate = _startDate.HasValue ? DateOnly.FromDateTime(_startDate.Value) : null, EndDate = _endDate.HasValue ? DateOnly.FromDateTime(_endDate.Value) : null };
+                var res = await Api.UpdateCampaignAsync(CampaignId!.Value, req);
+                if (res.Success) { Snackbar.Add("Uppdaterad.", Severity.Success); MudDialog.Close(DialogResult.Ok(true)); } else Snackbar.Add(res.Errors.FirstOrDefault() ?? "Fel.", Severity.Error);
+            }
+            else
+            {
+                var req = new CreateCampaignRequest { Name = _name, Description = _description.NullIfEmpty(), BudgetGoal = _budgetGoal > 0 ? _budgetGoal : null, Status = Enum.Parse<CampaignStatus>(_status), StartDate = _startDate.HasValue ? DateOnly.FromDateTime(_startDate.Value) : null, EndDate = _endDate.HasValue ? DateOnly.FromDateTime(_endDate.Value) : null };
+                var res = await Api.CreateCampaignAsync(req);
+                if (res.Success) { Snackbar.Add("Skapad.", Severity.Success); MudDialog.Close(DialogResult.Ok(res.Data)); } else Snackbar.Add(res.Errors.FirstOrDefault() ?? "Fel.", Severity.Error);
+            }
+        }
+        finally { _saving = false; }
+    }
+    private void Cancel() => MudDialog.Cancel();
+}

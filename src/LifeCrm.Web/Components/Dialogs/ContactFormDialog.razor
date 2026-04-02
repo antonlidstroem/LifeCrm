@@ -1,0 +1,65 @@
+@inject ApiClient Api
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent><MudText Typo="Typo.h6"><MudIcon Icon="@(_isEdit ? Icons.Material.Filled.Edit : Icons.Material.Filled.PersonAdd)" Class="mr-2 mb-n1" />@(_isEdit ? "Redigera kontakt" : "Ny kontakt")</MudText></TitleContent>
+    <DialogContent>
+        <MudGrid Spacing="2">
+            <MudItem xs="12"><MudTextField @bind-Value="_name" Label="Namn *" Variant="Variant.Outlined" Required="true" /></MudItem>
+            <MudItem xs="12" sm="6"><MudSelect T="string" @bind-Value="_type" Label="Typ *" Variant="Variant.Outlined"><MudSelectItem Value="@("Individual")">Privatperson</MudSelectItem><MudSelectItem Value="@("Organization")">Organisation</MudSelectItem><MudSelectItem Value="@("Church")">Kyrka</MudSelectItem><MudSelectItem Value="@("Foundation")">Stiftelse</MudSelectItem></MudSelect></MudItem>
+            <MudItem xs="12" sm="6"><MudTextField @bind-Value="_email" Label="E-post" Variant="Variant.Outlined" InputType="InputType.Email" /></MudItem>
+            <MudItem xs="12" sm="6"><MudTextField @bind-Value="_phone" Label="Telefon" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" sm="6"><MudTextField @bind-Value="_city" Label="Stad" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" sm="6"><MudTextField @bind-Value="_country" Label="Land" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12"><MudTextField @bind-Value="_tags" Label="Taggar (kommaseparerade)" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12"><MudTextField @bind-Value="_notes" Label="Anteckningar" Variant="Variant.Outlined" Lines="3" /></MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Variant="Variant.Text">Avbryt</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit" Disabled="_saving">@(_saving ? "Sparar…" : (_isEdit ? "Spara ändringar" : "Skapa kontakt"))</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public Guid? ContactId { get; set; }
+    private bool _isEdit, _saving;
+    private string _name = string.Empty, _type = "Individual", _email = string.Empty, _phone = string.Empty, _city = string.Empty, _country = string.Empty, _tags = string.Empty, _notes = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _isEdit = ContactId.HasValue;
+        if (!_isEdit) return;
+        var res = await Api.GetContactAsync(ContactId!.Value);
+        if (res.Data is null) return;
+        var c = res.Data;
+        _name = c.Name; _type = c.Type.ToString(); _email = c.Email ?? string.Empty; _phone = c.Phone ?? string.Empty;
+        _city = c.City ?? string.Empty; _country = c.Country ?? string.Empty; _tags = c.Tags ?? string.Empty; _notes = c.Notes ?? string.Empty;
+    }
+
+    private async Task Submit()
+    {
+        if (string.IsNullOrWhiteSpace(_name)) { Snackbar.Add("Namn är obligatoriskt.", Severity.Warning); return; }
+        _saving = true;
+        try
+        {
+            if (_isEdit)
+            {
+                var req = new UpdateContactRequest { Id = ContactId!.Value, Name = _name, Type = Enum.Parse<ContactType>(_type), Email = _email.NullIfEmpty(), Phone = _phone.NullIfEmpty(), City = _city.NullIfEmpty(), Country = _country.NullIfEmpty(), Tags = _tags.NullIfEmpty(), Notes = _notes.NullIfEmpty() };
+                var res = await Api.UpdateContactAsync(ContactId!.Value, req);
+                if (res.Success) { Snackbar.Add("Kontakten har uppdaterats.", Severity.Success); MudDialog.Close(DialogResult.Ok(true)); }
+                else Snackbar.Add(res.Errors.FirstOrDefault() ?? "Fel.", Severity.Error);
+            }
+            else
+            {
+                var req = new CreateContactRequest { Name = _name, Type = Enum.Parse<ContactType>(_type), Email = _email.NullIfEmpty(), Phone = _phone.NullIfEmpty(), City = _city.NullIfEmpty(), Country = _country.NullIfEmpty(), Tags = _tags.NullIfEmpty(), Notes = _notes.NullIfEmpty() };
+                var res = await Api.CreateContactAsync(req);
+                if (res.Success) { Snackbar.Add("Kontakten har skapats.", Severity.Success); MudDialog.Close(DialogResult.Ok(res.Data)); }
+                else Snackbar.Add(res.Errors.FirstOrDefault() ?? "Fel.", Severity.Error);
+            }
+        }
+        finally { _saving = false; }
+    }
+    private void Cancel() => MudDialog.Cancel();
+}

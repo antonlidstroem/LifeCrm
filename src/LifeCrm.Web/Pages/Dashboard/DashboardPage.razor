@@ -1,0 +1,133 @@
+@page "/"
+@inject ApiClient Api
+
+<MudText Typo="Typo.h4" Class="mb-6">Dashboard</MudText>
+
+@if (_loading) { <MudProgressCircular Indeterminate="true" /> }
+else if (_data is not null)
+{
+    <MudGrid Class="mb-4">
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <div>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Gåvor denna månad</MudText>
+                        <MudText Typo="Typo.h5">$@_data.DonationsThisMonth.ToString("N0")</MudText>
+                    </div>
+                    <MudIcon Icon="@Icons.Material.Filled.AttachMoney" Color="Color.Primary" Style="font-size:2.5rem;" />
+                </MudStack>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mt-1">
+                    <MudIcon Icon="@(_data.DonationsMoMChangePercent >= 0 ? Icons.Material.Filled.TrendingUp : Icons.Material.Filled.TrendingDown)"
+                             Size="Size.Small" Color="@(_data.DonationsMoMChangePercent >= 0 ? Color.Success : Color.Error)" />
+                    <MudText Typo="Typo.caption" Color="@(_data.DonationsMoMChangePercent >= 0 ? Color.Success : Color.Error)">
+                        @(_data.DonationsMoMChangePercent >= 0 ? "+" : "")@_data.DonationsMoMChangePercent.ToString("N1")% vs förra månaden
+                    </MudText>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <div>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Totalt kontakter</MudText>
+                        <MudText Typo="Typo.h5">@_data.TotalContacts.ToString("N0")</MudText>
+                    </div>
+                    <MudIcon Icon="@Icons.Material.Filled.People" Color="Color.Secondary" Style="font-size:2.5rem;" />
+                </MudStack>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">+@_data.NewContactsThisMonth nya denna månad</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <div>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Aktiva kampanjer</MudText>
+                        <MudText Typo="Typo.h5">@_data.ActiveCampaigns</MudText>
+                    </div>
+                    <MudIcon Icon="@Icons.Material.Filled.Campaign" Color="Color.Success" Style="font-size:2.5rem;" />
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <div>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Förra månaden</MudText>
+                        <MudText Typo="Typo.h5">$@_data.DonationsLastMonth.ToString("N0")</MudText>
+                    </div>
+                    <MudIcon Icon="@Icons.Material.Filled.CalendarMonth" Color="Color.Default" Style="font-size:2.5rem;" />
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <MudGrid>
+        <MudItem xs="12" md="6">
+            <MudCard Elevation="2">
+                <MudCardHeader><CardHeaderContent><MudText Typo="Typo.h6">Topp kampanjer</MudText></CardHeaderContent></MudCardHeader>
+                <MudCardContent>
+                    @if (!_data.TopCampaigns.Any()) { <EmptyState Title="Inga aktiva kampanjer" Icon="@Icons.Material.Outlined.Campaign" /> }
+                    else
+                    {
+                        <MudList T="string" Dense="true" DisablePadding="true">
+                            @foreach (var c in _data.TopCampaigns)
+                            {
+                                <MudListItem>
+                                    <MudStack Spacing="1">
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                                            <MudLink Href="@($"/campaigns/{c.Id}")" Typo="Typo.body2">@c.Name</MudLink>
+                                            <MudText Typo="Typo.body2">$@c.TotalRaised.ToString("N0")@(c.BudgetGoal.HasValue ? $" / ${c.BudgetGoal.Value:N0}" : "")</MudText>
+                                        </MudStack>
+                                        @if (c.BudgetGoal.HasValue && c.BudgetGoal > 0)
+                                        { <MudProgressLinear Value="@(Math.Min((double)(c.ProgressPercent ?? 0), 100))" Color="Color.Primary" Size="Size.Small" Rounded="true" /> }
+                                    </MudStack>
+                                </MudListItem>
+                                <MudDivider />
+                            }
+                        </MudList>
+                    }
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <MudCard Elevation="2">
+                <MudCardHeader><CardHeaderContent><MudText Typo="Typo.h6">Senaste aktivitet</MudText></CardHeaderContent></MudCardHeader>
+                <MudCardContent>
+                    @if (!_data.RecentActivity.Any()) { <EmptyState Title="Ingen aktivitet ännu" Icon="@Icons.Material.Outlined.History" /> }
+                    else
+                    {
+                        <MudList T="string" Dense="true" DisablePadding="true">
+                            @foreach (var a in _data.RecentActivity)
+                            {
+                                <MudListItem>
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                        <MudIcon Icon="@(a.ActivityType == "Donation" ? Icons.Material.Filled.AttachMoney : Icons.Material.Filled.Chat)" Size="Size.Small" Color="Color.Primary" />
+                                        <div style="flex:1;min-width:0">
+                                            <MudText Typo="Typo.body2" Style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                                                @a.Summary — <MudLink Href="@($"/contacts/{a.ContactId}")">@a.ContactName</MudLink>
+                                            </MudText>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">@a.OccurredAt.ToString("g")</MudText>
+                                        </div>
+                                    </MudStack>
+                                </MudListItem>
+                                <MudDivider />
+                            }
+                        </MudList>
+                    }
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    private DashboardDto? _data;
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var result = await Api.GetDashboardAsync();
+        _data    = result.Data;
+        _loading = false;
+    }
+}

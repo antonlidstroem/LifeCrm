@@ -1,0 +1,12 @@
+<MudStack Spacing="1" Class="@Class">
+    @for (int i = 0; i < Rows; i++)
+    {
+        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="@($"{RowHeight}px")" Width="100%" Animation="Animation.Wave" />
+    }
+</MudStack>
+
+@code {
+    [Parameter] public int    Rows      { get; set; } = 5;
+    [Parameter] public int    RowHeight { get; set; } = 44;
+    [Parameter] public string Class     { get; set; } = string.Empty;
+}

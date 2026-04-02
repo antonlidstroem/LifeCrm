@@ -1,0 +1,83 @@
+@page "/campaigns"
+@inject ApiClient Api
+@inject AppState AppState
+@inject NavigationManager Nav
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudText Typo="Typo.h4">Kampanjer</MudText>
+    <MudSpacer />
+    @if (AppState.CanWrite) { <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">Ny kampanj</MudButton> }
+</MudStack>
+
+@if (_loading) { <LoadingSkeleton Rows="6" /> }
+else if (!_campaigns.Any())
+{
+    <EmptyState Title="Inga kampanjer ännu" Icon="@Icons.Material.Outlined.Campaign" Description="Skapa din första kampanj.">
+        <ActionContent>@if (AppState.CanWrite) { <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="OpenCreateDialog">Skapa kampanj</MudButton> }</ActionContent>
+    </EmptyState>
+}
+else
+{
+    <MudTable T="CampaignListDto" Items="_campaigns" Hover="true" Dense="true"
+              OnRowClick="@((TableRowClickEventArgs<CampaignListDto> e) => Nav.NavigateTo($"/campaigns/{e.Item.Id}"))">
+        <HeaderContent><MudTh>Namn</MudTh><MudTh>Status</MudTh><MudTh>Mål</MudTh><MudTh>Insamlat</MudTh><MudTh>Framsteg</MudTh><MudTh Style="width:90px"></MudTh></HeaderContent>
+        <RowTemplate>
+            <MudTd>@context.Name</MudTd>
+            <MudTd><MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="@context.Status.ToMudColor()">@context.Status</MudChip></MudTd>
+            <MudTd>@(context.BudgetGoal.HasValue ? $"${context.BudgetGoal:N2}" : "—")</MudTd>
+            <MudTd>$@context.TotalRaised.ToString("N2")</MudTd>
+            <MudTd Style="min-width:120px">
+                @if (context.BudgetGoal.HasValue && context.BudgetGoal > 0)
+                {
+                    var pct = Math.Min((double)(context.ProgressPercent ?? 0), 100);
+                    <MudProgressLinear Value="@pct" Color="Color.Primary" Size="Size.Small" Rounded="true" />
+                    <MudText Typo="Typo.caption">@pct.ToString("N0")%</MudText>
+                }
+            </MudTd>
+            <MudTd Style="white-space:nowrap" @onclick:stopPropagation="true">
+                @if (AppState.CanWrite) { <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => OpenEditDialog(context))" /> }
+                @if (AppState.IsAdmin)  { <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => DeleteCampaign(context))" /> }
+            </MudTd>
+        </RowTemplate>
+        <PagerContent><MudTablePager PageSizeOptions="new int[]{25,50}" /></PagerContent>
+    </MudTable>
+}
+
+@code {
+    private IReadOnlyList<CampaignListDto> _campaigns = Array.Empty<CampaignListDto>();
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading   = true;
+        var res    = await Api.GetCampaignsAsync(new PaginationParams { PageSize = 100 });
+        _campaigns = res.Data?.Items ?? Array.Empty<CampaignListDto>();
+        _loading   = false;
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        var d = DialogService.Show<CampaignFormDialog>("Ny kampanj", new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true });
+        if (!(await d.Result).Canceled) await LoadAsync();
+    }
+
+    private async Task OpenEditDialog(CampaignListDto c)
+    {
+        var d = DialogService.Show<CampaignFormDialog>("Redigera", new DialogParameters { ["CampaignId"] = c.Id }, new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true });
+        if (!(await d.Result).Canceled) await LoadAsync();
+    }
+
+    private async Task DeleteCampaign(CampaignListDto c)
+    {
+        var p = new DialogParameters { ["Title"] = "Ta bort kampanj", ["Message"] = $"Ta bort {c.Name}?" };
+        var confirm = DialogService.Show<ConfirmDialog>("", p);
+        if ((await confirm.Result).Canceled) return;
+        var res = await Api.DeleteCampaignAsync(c.Id);
+        if (res.Success) { Snackbar.Add("Borttagen.", Severity.Success); await LoadAsync(); }
+        else Snackbar.Add(res.Errors.FirstOrDefault() ?? "Fel.", Severity.Error);
+    }
+}
