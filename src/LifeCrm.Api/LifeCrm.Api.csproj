@@ -6,10 +6,12 @@
     <RootNamespace>LifeCrm.Api</RootNamespace>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591</NoWarn>
+    <UserSecretsId>6b3d7a1d-ef49-46e8-b926-b9a8c5974833</UserSecretsId>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\LifeCrm.Application\LifeCrm.Application.csproj" />
     <ProjectReference Include="..\LifeCrm.Infrastructure\LifeCrm.Infrastructure.csproj" />
+    <ProjectReference Include="..\LifeCrm.Web\LifeCrm.Web.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.11" />

@@ -15,16 +15,12 @@ namespace LifeCrm.Infrastructure.Persistence.Seeders
 
         public async Task SeedAsync()
         {
-            try
-            {
+            
                 await _db.Database.MigrateAsync();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Migration failed — database may already be up to date.");
-            }
+           
 
             if (await _db.Organizations.AnyAsync()) return;
+            _logger.LogInformation("No data found, starting seeding...");
 
             var org = new Organization
             {
