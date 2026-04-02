@@ -16,10 +16,16 @@ namespace LifeCrm.Api.Middleware
             h["X-XSS-Protection"]        = "1; mode=block";
             h["Permissions-Policy"]      = "camera=(), microphone=(), geolocation=(), payment=(), usb=()";
             h["Content-Security-Policy"] =
-                "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; " +
-                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
-                "font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; " +
-                "connect-src 'self' wss:; frame-ancestors 'none'; base-uri 'self'; form-action 'self';";
+             "default-src 'self'; " +
+             "script-src 'self' 'wasm-unsafe-eval'; " +
+             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+             "font-src 'self' https://fonts.gstatic.com; " +
+             "img-src 'self' data:; " +
+             // ÄNDRING HÄR: Tillåt anslutningar till localhost på alla portar (för API + Hot Reload)
+             "connect-src 'self' https://localhost:* http://localhost:* wss://localhost:* ws://localhost:*; " +
+             "frame-ancestors 'none'; " +
+             "base-uri 'self'; " +
+             "form-action 'self';";
             await _next(context);
         }
     }
