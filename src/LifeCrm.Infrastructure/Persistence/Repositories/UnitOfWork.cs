@@ -32,7 +32,12 @@ namespace LifeCrm.Infrastructure.Persistence.Repositories
 
         public void Dispose()
         {
-            if (!_disposed) { _db.Dispose(); _disposed = true; }
+            // FIXED: Do NOT dispose _db here. AppDbContext is registered as Scoped and
+            // is owned and disposed by the DI container. Disposing it here causes
+            // ObjectDisposedException on any subsequent use within the same request scope.
+            if (_disposed) return;
+            _disposed = true;
+            GC.SuppressFinalize(this);
         }
     }
 }

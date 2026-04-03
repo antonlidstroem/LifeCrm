@@ -16,8 +16,16 @@ namespace LifeCrm.Api.Controllers.v1
     {
         [HttpGet]
         [ProducesResponseType(typeof(ApiResponse<PagedResult<DonationListDto>>), StatusCodes.Status200OK)]
-        public async Task<IActionResult> GetAll([FromQuery] PaginationParams paging, [FromQuery] Guid? contactId, CancellationToken ct)
-            => OkResponse(await Mediator.Send(new GetDonationsQuery(paging, contactId), ct));
+        public async Task<IActionResult> GetAll(
+            [FromQuery] PaginationParams paging,
+            [FromQuery] Guid?     contactId,
+            [FromQuery] DateOnly? fromDate,
+            [FromQuery] DateOnly? toDate,
+            [FromQuery] Guid?     campaignId,
+            [FromQuery] Guid?     projectId,
+            CancellationToken ct)
+            => OkResponse(await Mediator.Send(
+                new GetDonationsQuery(paging, contactId, fromDate, toDate, campaignId, projectId), ct));
 
         [HttpGet("{id:guid}")]
         public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
@@ -52,13 +60,18 @@ namespace LifeCrm.Api.Controllers.v1
 
         [HttpPost("{id:guid}/receipt")]
         [Authorize(Policy = "FinanceOrAdmin")]
-        public async Task<IActionResult> GenerateReceipt(Guid id, [FromQuery] bool sendByEmail = false, CancellationToken ct = default)
-            => OkResponse(await Mediator.Send(new GenerateDonationReceiptCommand(new GenerateDonationReceiptRequest { DonationId = id, SendByEmail = sendByEmail }), ct));
+        public async Task<IActionResult> GenerateReceipt(
+            Guid id, [FromQuery] bool sendByEmail = false, CancellationToken ct = default)
+            => OkResponse(await Mediator.Send(
+                new GenerateDonationReceiptCommand(
+                    new GenerateDonationReceiptRequest { DonationId = id, SendByEmail = sendByEmail }), ct));
 
         [HttpGet("{donationId:guid}/receipt/{documentId:guid}/download")]
-        public async Task<IActionResult> DownloadReceipt(Guid donationId, Guid documentId, [FromServices] AppDbContext context, CancellationToken ct)
+        public async Task<IActionResult> DownloadReceipt(
+            Guid donationId, Guid documentId, [FromServices] AppDbContext context, CancellationToken ct)
         {
-            var doc = await context.Documents.FirstOrDefaultAsync(d => d.Id == documentId && d.DonationId == donationId, ct);
+            var doc = await context.Documents
+                .FirstOrDefaultAsync(d => d.Id == documentId && d.DonationId == donationId, ct);
             if (doc is null) return NotFound();
             return File(doc.PdfBytes, "application/pdf", System.IO.Path.GetFileName(doc.FileName));
         }

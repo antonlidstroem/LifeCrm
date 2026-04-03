@@ -9,7 +9,7 @@ namespace LifeCrm.Infrastructure.Services
     {
         public async Task<byte[]> ExportAsync<T>(IEnumerable<T> rows)
         {
-            await using var ms = new MemoryStream();
+            await using var ms     = new MemoryStream();
             await using var writer = new StreamWriter(ms);
             using var csv = new CsvWriter(writer, new CsvConfiguration(CultureInfo.InvariantCulture));
             await csv.WriteRecordsAsync(rows);
@@ -21,19 +21,26 @@ namespace LifeCrm.Infrastructure.Services
         {
             var rows   = new List<T>();
             var errors = new List<CsvParseError>();
-            var line   = 0;
 
-            await using var ms = new MemoryStream(csvBytes);
-            using var reader   = new StreamReader(ms);
-            using var csv      = new CsvReader(reader, new CsvConfiguration(CultureInfo.InvariantCulture)
+            await using var ms   = new MemoryStream(csvBytes);
+            using var reader     = new StreamReader(ms);
+            using var csv        = new CsvReader(reader, new CsvConfiguration(CultureInfo.InvariantCulture)
             {
-                HeaderValidated = null, MissingFieldFound = null
+                HeaderValidated   = null,
+                MissingFieldFound = null
             });
 
+            // FIXED: CsvHelper requires ReadAsync() + ReadHeader() before the loop.
+            // The old code called ReadHeader() inside the while loop, which is incorrect.
+            if (!await csv.ReadAsync())
+                return (rows, errors); // empty file
+
+            csv.ReadHeader();
+
+            int line = 1;
             while (await csv.ReadAsync())
             {
                 line++;
-                if (line == 1 && csv.ReadHeader()) continue;
                 try
                 {
                     var record = csv.GetRecord<T>();
@@ -44,6 +51,7 @@ namespace LifeCrm.Infrastructure.Services
                     errors.Add(new CsvParseError(line, ex.Message, csv.Parser.RawRecord.TrimEnd()));
                 }
             }
+
             return (rows, errors);
         }
     }

@@ -3,6 +3,7 @@
 @inject AppState AppState
 @inject NavigationManager Nav
 @inject SignalRService SignalR
+@inject Blazored.LocalStorage.ILocalStorageService Storage
 
 <MudGrid Justify="Justify.Center" Class="mt-8">
     <MudItem xs="12" sm="6" md="4">
@@ -49,10 +50,21 @@
         {
             await Api.SaveTokenAsync(result.Data.Token);
             AppState.SetUser(result.Data);
-            await SignalR.ConnectAsync("https://localhost:59152", result.Data.Token, result.Data.OrganizationId);
+
+            // FIXED: Persist user to localStorage so page refresh restores the session
+            await AppState.PersistAsync(Storage);
+
+            // FIXED: Derive SignalR URL from current base URI instead of hardcoded localhost.
+            // Trim trailing slash so URL concat is clean.
+            var baseUri = Nav.BaseUri.TrimEnd('/');
+            await SignalR.ConnectAsync(baseUri, result.Data.Token, result.Data.OrganizationId);
+
             Nav.NavigateTo("/");
         }
-        else { _error = result.Errors.FirstOrDefault() ?? "Inloggning misslyckades."; }
+        else
+        {
+            _error = result.Errors.FirstOrDefault() ?? "Inloggning misslyckades.";
+        }
         _loading = false;
     }
 }

@@ -63,19 +63,20 @@ namespace LifeCrm.Application.Contacts.DTOs
         [Required] public Guid Id { get; init; }
     }
 
+    // FIXED: Removed bogus ErrorCount property — it was being mapped from CSV columns
+    // and polluting import results. CSV row DTOs should only contain column-mapped fields.
     public record ContactCsvRow
     {
-        public string Name { get; init; } = string.Empty;
-        public string? Type { get; init; }
-        public string? Email { get; init; }
-        public string? Phone { get; init; }
-        public string? Tags { get; init; }
+        public string  Name         { get; init; } = string.Empty;
+        public string? Type         { get; init; }
+        public string? Email        { get; init; }
+        public string? Phone        { get; init; }
+        public string? Tags         { get; init; }
         public string? AddressLine1 { get; init; }
-        public string? City { get; init; }
-        public string? StateProvince { get; init; }
-        public string? PostalCode { get; init; }
-        public string? Country { get; init; }
-        public string? Notes { get; init; }
-        public int ErrorCount { get; init; }
+        public string? City         { get; init; }
+        public string? StateProvince{ get; init; }
+        public string? PostalCode   { get; init; }
+        public string? Country      { get; init; }
+        public string? Notes        { get; init; }
     }
 }

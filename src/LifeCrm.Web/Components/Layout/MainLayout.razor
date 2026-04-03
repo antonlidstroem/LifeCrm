@@ -3,6 +3,8 @@
 @inject AppState AppState
 @inject NavigationManager Nav
 @inject SignalRService SignalR
+@inject Blazored.LocalStorage.ILocalStorageService Storage
+@inject ApiClient Api
 @implements IDisposable
 
 <MudThemeProvider />
@@ -10,7 +12,11 @@
 <MudDialogProvider />
 <MudSnackbarProvider />
 
-@if (!AppState.IsAuthenticated)
+@if (_initializing)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+}
+else if (!AppState.IsAuthenticated)
 {
     <LifeCrm.Web.Pages.Auth.LoginPage />
 }
@@ -92,12 +98,25 @@ else
 @code {
     private bool _activityOpen;
     private int  _unreadActivity;
+    private bool _initializing = true;
     private readonly List<FeedItem> _activityFeed = new();
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         AppState.StateChanged += OnStateChanged;
         SignalR.OnActivity    += OnActivityReceived;
+
+        // Restore session from localStorage so page refresh doesn't log the user out.
+        await AppState.TryRestoreAsync(Storage);
+
+        // If authenticated (restored from storage), reconnect SignalR.
+        if (AppState.IsAuthenticated && !SignalR.IsConnected && AppState.Token is not null)
+        {
+            var baseUri = Nav.BaseUri.TrimEnd('/');
+            await SignalR.ConnectAsync(baseUri, AppState.Token, AppState.OrganizationId!);
+        }
+
+        _initializing = false;
     }
 
     private void OnStateChanged() => InvokeAsync(StateHasChanged);
@@ -122,10 +141,17 @@ else
     private async Task Logout()
     {
         await SignalR.DisconnectAsync();
+        await AppState.ClearPersistedAsync(Storage);
+        await Api.ClearTokenAsync();
         AppState.ClearUser();
         Nav.NavigateTo("/");
     }
 
-    public void Dispose() { AppState.StateChanged -= OnStateChanged; SignalR.OnActivity -= OnActivityReceived; }
+    public void Dispose()
+    {
+        AppState.StateChanged -= OnStateChanged;
+        SignalR.OnActivity    -= OnActivityReceived;
+    }
+
     private record FeedItem(string Message, DateTime Time);
 }

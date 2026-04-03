@@ -1,4 +1,6 @@
 using LifeCrm.Application.Common.DTOs;
+using LifeCrm.Application.Interactions.DTOs;
+using LifeCrm.Application.Interactions.Queries;
 using LifeCrm.Application.Projects.Commands;
 using LifeCrm.Application.Projects.DTOs;
 using LifeCrm.Application.Projects.Queries;
@@ -17,6 +19,13 @@ namespace LifeCrm.Api.Controllers.v1
         [HttpGet("{id:guid}")]
         public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
             => OkResponse(await Mediator.Send(new GetProjectByIdQuery(id), ct));
+
+        // FIXED: Added interactions sub-resource endpoint so ProjectDetailPage can
+        // load project interactions via ApiClient.GetProjectInteractionsAsync().
+        [HttpGet("{id:guid}/interactions")]
+        [ProducesResponseType(typeof(ApiResponse<IReadOnlyList<InteractionDto>>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetInteractions(Guid id, CancellationToken ct)
+            => OkResponse(await Mediator.Send(new GetInteractionsByProjectQuery(id), ct));
 
         [HttpPost]
         [Authorize(Policy = "CanWrite")]

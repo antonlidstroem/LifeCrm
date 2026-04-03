@@ -1,0 +1,129 @@
+@inject ApiClient Api
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.FolderOpen" Class="mr-2 mb-n1" />
+            @(_isEdit ? "Redigera projekt" : "Nytt projekt")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudGrid Spacing="2">
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_name" Label="Namn *" Variant="Variant.Outlined" Required="true" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_description" Label="Beskrivning" Variant="Variant.Outlined" Lines="3" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_location" Label="Plats / Land" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudNumericField @bind-Value="_budgetGoal" Label="Finansieringsmål" Variant="Variant.Outlined"
+                                 Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.AttachMoney"
+                                 HideSpinButtons="true" Min="0m" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                @* FIXED: All ProjectStatus enum values included (Archived was missing) *@
+                <MudSelect T="string" @bind-Value="_status" Label="Status" Variant="Variant.Outlined">
+                    <MudSelectItem Value="@("Planning")">Planering</MudSelectItem>
+                    <MudSelectItem Value="@("Active")">Aktiv</MudSelectItem>
+                    <MudSelectItem Value="@("OnHold")">Pausat</MudSelectItem>
+                    <MudSelectItem Value="@("Completed")">Avslutat</MudSelectItem>
+                    <MudSelectItem Value="@("Archived")">Arkiverat</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudDatePicker @bind-Date="_startDate" Label="Startdatum" Variant="Variant.Outlined" Editable="true" Clearable="true" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudDatePicker @bind-Date="_endDate" Label="Slutdatum" Variant="Variant.Outlined" Editable="true" Clearable="true" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_notes" Label="Anteckningar" Variant="Variant.Outlined" Lines="2" />
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Variant="Variant.Text">Avbryt</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit" Disabled="_saving">
+            @(_saving ? "Sparar…" : (_isEdit ? "Spara" : "Skapa"))
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public Guid? ProjectId { get; set; }
+
+    private bool    _isEdit, _saving;
+    private string  _name = string.Empty, _description = string.Empty,
+                    _location = string.Empty, _status = "Planning", _notes = string.Empty;
+    private decimal?  _budgetGoal;
+    private DateTime? _startDate, _endDate;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _isEdit = ProjectId.HasValue;
+        if (!_isEdit) return;
+        var res = await Api.GetProjectAsync(ProjectId!.Value);
+        if (res.Data is null) return;
+        var p = res.Data;
+        _name        = p.Name;
+        _description = p.Description ?? string.Empty;
+        _location    = p.Location    ?? string.Empty;
+        _budgetGoal  = p.BudgetGoal;
+        _status      = p.Status.ToString();
+        _notes       = p.Notes ?? string.Empty;
+        _startDate   = p.StartDate?.ToDateTime(TimeOnly.MinValue);
+        _endDate     = p.EndDate?.ToDateTime(TimeOnly.MinValue);
+    }
+
+    private async Task Submit()
+    {
+        if (string.IsNullOrWhiteSpace(_name)) { Snackbar.Add("Namn är obligatoriskt.", Severity.Warning); return; }
+        _saving = true;
+        try
+        {
+            if (_isEdit)
+            {
+                var req = new UpdateProjectRequest
+                {
+                    Id          = ProjectId!.Value,
+                    Name        = _name,
+                    Description = _description.NullIfEmpty(),
+                    Location    = _location.NullIfEmpty(),
+                    BudgetGoal  = _budgetGoal > 0 ? _budgetGoal : null,
+                    Status      = Enum.Parse<ProjectStatus>(_status),
+                    StartDate   = _startDate.HasValue ? DateOnly.FromDateTime(_startDate.Value) : null,
+                    EndDate     = _endDate.HasValue   ? DateOnly.FromDateTime(_endDate.Value)   : null,
+                    Notes       = _notes.NullIfEmpty()
+                };
+                var res = await Api.UpdateProjectAsync(ProjectId!.Value, req);
+                if (res.Success) { Snackbar.Add("Uppdaterat.", Severity.Success); MudDialog.Close(DialogResult.Ok(true)); }
+                else Snackbar.Add(res.Errors.FirstOrDefault() ?? "Fel.", Severity.Error);
+            }
+            else
+            {
+                var req = new CreateProjectRequest
+                {
+                    Name        = _name,
+                    Description = _description.NullIfEmpty(),
+                    Location    = _location.NullIfEmpty(),
+                    BudgetGoal  = _budgetGoal > 0 ? _budgetGoal : null,
+                    Status      = Enum.Parse<ProjectStatus>(_status),
+                    StartDate   = _startDate.HasValue ? DateOnly.FromDateTime(_startDate.Value) : null,
+                    EndDate     = _endDate.HasValue   ? DateOnly.FromDateTime(_endDate.Value)   : null,
+                    Notes       = _notes.NullIfEmpty()
+                };
+                var res = await Api.CreateProjectAsync(req);
+                if (res.Success) { Snackbar.Add("Skapat.", Severity.Success); MudDialog.Close(DialogResult.Ok(res.Data)); }
+                else Snackbar.Add(res.Errors.FirstOrDefault() ?? "Fel.", Severity.Error);
+            }
+        }
+        finally { _saving = false; }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

@@ -8,7 +8,8 @@
     <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Nav.NavigateTo("/campaigns"))" />
     <MudText Typo="Typo.h5">@(_campaign?.Name ?? "Laddar…")</MudText>
     <MudSpacer />
-    @if (AppState.CanWrite && _campaign is not null) { <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Edit" OnClick="OpenEditDialog">Redigera</MudButton> }
+    @if (AppState.CanWrite && _campaign is not null)
+    { <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Edit" OnClick="OpenEditDialog">Redigera</MudButton> }
 </MudStack>
 
 @if (_loading) { <MudProgressLinear Color="Color.Primary" Indeterminate="true" /> }
@@ -29,8 +30,18 @@ else if (_campaign is not null)
                         <div><MudText Typo="Typo.caption" Color="Color.Secondary">Mål</MudText><MudText Typo="Typo.h6">@(_campaign.BudgetGoal.HasValue ? $"${_campaign.BudgetGoal:N2}" : "—")</MudText></div>
                         <div><MudText Typo="Typo.caption" Color="Color.Secondary">Gåvor</MudText><MudText Typo="Typo.h6">@_campaign.DonationCount</MudText></div>
                     </MudStack>
-                    @if (!string.IsNullOrEmpty(_campaign.Description)) { <MudDivider Class="my-3" /><MudText Typo="Typo.caption" Color="Color.Secondary">Beskrivning</MudText><MudText Typo="Typo.body2" Class="mt-1">@_campaign.Description</MudText> }
-                    @if (!string.IsNullOrEmpty(_campaign.Notes)) { <MudDivider Class="my-3" /><MudText Typo="Typo.caption" Color="Color.Secondary">Anteckningar</MudText><MudText Typo="Typo.body2" Class="mt-1">@_campaign.Notes</MudText> }
+                    @if (!string.IsNullOrEmpty(_campaign.Description))
+                    {
+                        <MudDivider Class="my-3" />
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Beskrivning</MudText>
+                        <MudText Typo="Typo.body2" Class="mt-1">@_campaign.Description</MudText>
+                    }
+                    @if (!string.IsNullOrEmpty(_campaign.Notes))
+                    {
+                        <MudDivider Class="my-3" />
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Anteckningar</MudText>
+                        <MudText Typo="Typo.body2" Class="mt-1">@_campaign.Notes</MudText>
+                    }
                 </MudCardContent>
             </MudCard>
         </MudItem>
@@ -38,11 +49,14 @@ else if (_campaign is not null)
             <MudCard Elevation="2">
                 <MudCardHeader><CardHeaderContent><MudText Typo="Typo.h6">Kopplade gåvor</MudText></CardHeaderContent></MudCardHeader>
                 <MudCardContent>
-                    @if (!_donations.Any()) { <EmptyState Title="Inga gåvor kopplade" Icon="@Icons.Material.Outlined.AttachMoney" /> }
+                    @if (!_donations.Any())
+                    { <EmptyState Title="Inga gåvor kopplade" Icon="@Icons.Material.Outlined.AttachMoney" /> }
                     else
                     {
                         <MudTable T="DonationListDto" Items="_donations" Dense="true" Hover="true" Elevation="0">
-                            <HeaderContent><MudTh>Datum</MudTh><MudTh>Givare</MudTh><MudTh>Belopp</MudTh><MudTh>Status</MudTh></HeaderContent>
+                            <HeaderContent>
+                                <MudTh>Datum</MudTh><MudTh>Givare</MudTh><MudTh>Belopp</MudTh><MudTh>Status</MudTh>
+                            </HeaderContent>
                             <RowTemplate>
                                 <MudTd>@context.Date.ToString("yyyy-MM-dd")</MudTd>
                                 <MudTd><MudLink Href="@($"/contacts/{context.ContactId}")">@context.ContactName</MudLink></MudTd>
@@ -69,18 +83,21 @@ else if (_campaign is not null)
     private async Task LoadAsync()
     {
         _loading = true;
-        var t1 = Api.GetCampaignAsync(Id);
-        var t2 = Api.GetDonationsAsync(new PaginationParams { PageSize = 500 });
-        await Task.WhenAll(t1, t2);
-        _campaign  = t1.Result.Data;
-        _donations = t2.Result.Data?.Items.Where(d => d.CampaignName == _campaign?.Name).ToList()
-             ?? new List<DonationListDto>();
+        var campaignTask  = Api.GetCampaignAsync(Id);
+        // FIXED: Filter donations by campaignId on the server, not by name string client-side.
+        // Old code: t2.Result.Data?.Items.Where(d => d.CampaignName == _campaign?.Name)
+        // This was fragile (string match), loaded ALL donations, and could mismatch on name collision.
+        var donationsTask = Api.GetDonationsAsync(new PaginationParams { PageSize = 500 }, campaignId: Id);
+        await Task.WhenAll(campaignTask, donationsTask);
+        _campaign  = campaignTask.Result.Data;
+        _donations = donationsTask.Result.Data?.Items ?? Array.Empty<DonationListDto>();
         _loading   = false;
     }
 
     private async Task OpenEditDialog()
     {
-        var d = DialogService.Show<CampaignFormDialog>("Redigera", new DialogParameters { ["CampaignId"] = Id }, new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true });
+        var d = DialogService.Show<CampaignFormDialog>("Redigera", new DialogParameters { ["CampaignId"] = Id },
+            new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true });
         if (!(await d.Result).Canceled) await LoadAsync();
     }
 }

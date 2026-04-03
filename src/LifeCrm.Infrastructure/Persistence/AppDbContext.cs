@@ -28,23 +28,29 @@ namespace LifeCrm.Infrastructure.Persistence
         {
             base.OnModelCreating(mb);
 
-            // Global soft-delete + tenant filters on TenantEntity types
-            var orgId = _currentUser?.OrganizationId ?? Guid.Empty;
-
+            // FIXED: Use a closure that reads _currentUser at query-execution time,
+            // not at DbContext construction time. This ensures per-request tenant isolation.
             mb.Entity<Contact>()
-                .HasQueryFilter(e => !e.IsDeleted && e.OrganizationId == orgId);
+                .HasQueryFilter(e => !e.IsDeleted &&
+                    (_currentUser == null || !_currentUser.IsAuthenticated || e.OrganizationId == _currentUser.OrganizationId));
             mb.Entity<Donation>()
-                .HasQueryFilter(e => !e.IsDeleted && e.OrganizationId == orgId);
+                .HasQueryFilter(e => !e.IsDeleted &&
+                    (_currentUser == null || !_currentUser.IsAuthenticated || e.OrganizationId == _currentUser.OrganizationId));
             mb.Entity<Campaign>()
-                .HasQueryFilter(e => !e.IsDeleted && e.OrganizationId == orgId);
+                .HasQueryFilter(e => !e.IsDeleted &&
+                    (_currentUser == null || !_currentUser.IsAuthenticated || e.OrganizationId == _currentUser.OrganizationId));
             mb.Entity<Project>()
-                .HasQueryFilter(e => !e.IsDeleted && e.OrganizationId == orgId);
+                .HasQueryFilter(e => !e.IsDeleted &&
+                    (_currentUser == null || !_currentUser.IsAuthenticated || e.OrganizationId == _currentUser.OrganizationId));
             mb.Entity<Interaction>()
-                .HasQueryFilter(e => !e.IsDeleted && e.OrganizationId == orgId);
+                .HasQueryFilter(e => !e.IsDeleted &&
+                    (_currentUser == null || !_currentUser.IsAuthenticated || e.OrganizationId == _currentUser.OrganizationId));
             mb.Entity<Document>()
-                .HasQueryFilter(e => !e.IsDeleted && e.OrganizationId == orgId);
+                .HasQueryFilter(e => !e.IsDeleted &&
+                    (_currentUser == null || !_currentUser.IsAuthenticated || e.OrganizationId == _currentUser.OrganizationId));
             mb.Entity<ApplicationUser>()
-                .HasQueryFilter(e => !e.IsDeleted && e.OrganizationId == orgId);
+                .HasQueryFilter(e => !e.IsDeleted &&
+                    (_currentUser == null || !_currentUser.IsAuthenticated || e.OrganizationId == _currentUser.OrganizationId));
 
             // Decimal precision
             mb.Entity<Donation>().Property(d => d.Amount).HasPrecision(18, 2);

@@ -12,14 +12,13 @@
     {
         <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Upload" OnClick="OpenImportDialog" Class="mr-2">Importera CSV</MudButton>
         <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Download" OnClick="ExportCsv" Class="mr-2">Exportera CSV</MudButton>
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PersonAdd" OnClick="OpenCreateDialog">Ny kontakt</MudButton>
+        <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.PersonAdd" Color="Color.Primary" OnClick="OpenCreateDialog">Ny kontakt</MudButton>
     }
 </MudStack>
 
-<!-- FIX: ValueChanged="OnSearchChanged" — direct method ref so async Task is properly awaited -->
 <MudTextField T="string"
               Value="_search"
-              ValueChanged="@(s => OnSearchChanged(s))"
+              ValueChanged="OnSearchChanged"
               Placeholder="Sök på namn, e-post eller taggar…"
               Adornment="Adornment.Start"
               AdornmentIcon="@Icons.Material.Filled.Search"
@@ -29,89 +28,151 @@
               Clearable="true"
               Class="mb-4" />
 
-@if (_loading) { <LoadingSkeleton Rows="8" /> }
-else if (!_contacts.Any())
-{
-    <EmptyState Title="Inga kontakter hittades" Description="@(_search.Length > 0 ? "Prova ett annat sökord." : "Lägg till din första kontakt.")" Icon="@Icons.Material.Filled.People">
-        <ActionContent>@if (AppState.CanWrite) { <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="OpenCreateDialog">Lägg till kontakt</MudButton> }</ActionContent>
-    </EmptyState>
-}
-else
-{
-    <MudTable T="ContactListDto" Items="_contacts" Hover="true" Dense="true"
-              OnRowClick="@((TableRowClickEventArgs<ContactListDto> e) => Nav.NavigateTo($"/contacts/{e.Item.Id}"))">
-        <HeaderContent>
-            <MudTh>Namn</MudTh><MudTh>Typ</MudTh><MudTh>E-post</MudTh><MudTh>Telefon</MudTh><MudTh>Totalt gåvor</MudTh><MudTh Style="width:100px"></MudTh>
-        </HeaderContent>
-        <RowTemplate>
-            <MudTd DataLabel="Namn">
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                    <MudAvatar Color="Color.Primary" Size="Size.Small">@context.Name[0]</MudAvatar>
-                    <MudText>@context.Name</MudText>
-                </MudStack>
-            </MudTd>
-            <MudTd DataLabel="Typ"><MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="@context.Type.ToMudColor()">@context.Type</MudChip></MudTd>
-            <MudTd DataLabel="E-post">@(context.Email ?? "—")</MudTd>
-            <MudTd DataLabel="Telefon">@(context.Phone ?? "—")</MudTd>
-            <MudTd DataLabel="Totalt gåvor">$@context.TotalDonations.ToString("N2")</MudTd>
-            <MudTd Style="white-space:nowrap" @onclick:stopPropagation="true">
-                @if (AppState.CanWrite) { <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => OpenEditDialog(context))" /> }
-                @if (AppState.IsAdmin)  { <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => DeleteContact(context))" /> }
-            </MudTd>
-        </RowTemplate>
-        <PagerContent><MudTablePager PageSizeOptions="new int[]{25,50,100}" /></PagerContent>
-    </MudTable>
-}
+<MudTable T="ContactListDto"
+          ServerData="ServerReload"
+          @ref="_table"
+          Hover="true"
+          Dense="true"
+          OnRowClick="@((TableRowClickEventArgs<ContactListDto> e) => Nav.NavigateTo($"/contacts/{e.Item.Id}"))">
+
+    <HeaderContent>
+        <MudTh>Namn</MudTh>
+        <MudTh>Typ</MudTh>
+        <MudTh>E-post</MudTh>
+        <MudTh>Telefon</MudTh>
+        <MudTh>Totalt gåvor</MudTh>
+        <MudTh Style="width:100px"></MudTh>
+    </HeaderContent>
+
+    <RowTemplate>
+        <MudTd DataLabel="Namn">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudAvatar Color="Color.Primary" Size="Size.Small">@context.Name[0]</MudAvatar>
+                <MudText>@context.Name</MudText>
+            </MudStack>
+        </MudTd>
+        <MudTd DataLabel="Typ">
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="@context.Type.ToMudColor()">@context.Type</MudChip>
+        </MudTd>
+        <MudTd DataLabel="E-post">@(context.Email ?? "—")</MudTd>
+        <MudTd DataLabel="Telefon">@(context.Phone ?? "—")</MudTd>
+        <MudTd DataLabel="Totalt gåvor">$@context.TotalDonations.ToString("N2")</MudTd>
+        <MudTd Style="white-space:nowrap" @onclick:stopPropagation="true">
+            @if (AppState.CanWrite)
+            {
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => OpenEditDialog(context))" />
+            }
+            @if (AppState.IsAdmin)
+            {
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => DeleteContact(context))" />
+            }
+        </MudTd>
+    </RowTemplate>
+
+    <NoRecordsContent>
+        <EmptyState Title="Inga kontakter hittades"
+                    Description="@(_search.Length > 0 ? "Prova ett annat sökord." : "Lägg till din första kontakt.")"
+                    Icon="@Icons.Material.Filled.People">
+            <ActionContent>
+                @if (AppState.CanWrite)
+                {
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="OpenCreateDialog">Lägg till kontakt</MudButton>
+                }
+            </ActionContent>
+        </EmptyState>
+    </NoRecordsContent>
+
+    <LoadingContent>
+        <MudText Typo="Typo.body1" Class="pa-4">Laddar kontakter...</MudText>
+    </LoadingContent>
+
+    <PagerContent>
+        <MudTablePager PageSizeOptions="new int[] { 25, 50, 100 }" />
+    </PagerContent>
+</MudTable>
 
 @code {
-    private IReadOnlyList<ContactListDto> _contacts = Array.Empty<ContactListDto>();
-    private bool _loading = true;
+    private MudTable<ContactListDto>? _table;
     private string _search = string.Empty;
 
-    protected override async Task OnInitializedAsync() => await LoadAsync();
-
-    private async Task LoadAsync()
+    private async Task<TableData<ContactListDto>> ServerReload(TableState state, CancellationToken ct)
     {
-        _loading = true;
-        var res = await Api.GetContactsAsync(new PaginationParams { PageSize = 50, Search = _search });
-        _contacts = res.Data?.Items ?? Array.Empty<ContactListDto>();
-        _loading  = false;
+        var res = await Api.GetContactsAsync(new PaginationParams
+        {
+            Page = state.Page + 1,
+            PageSize = state.PageSize,
+            Search = _search,
+            SortBy = state.SortLabel,
+            SortAscending = state.SortDirection != MudBlazor.SortDirection.Descending
+        });
+
+        var paged = res.Data;
+
+        return new TableData<ContactListDto>
+        {
+            Items = paged?.Items ?? Array.Empty<ContactListDto>(),
+            TotalItems = paged?.TotalCount ?? 0
+        };
     }
 
-    // FIX: direct method reference — previous lambda "(string v) => OnSearchChanged(v)" discarded the Task
-    private async Task OnSearchChanged(string value) { _search = value; await LoadAsync(); }
+    private async Task OnSearchChanged(string value)
+    {
+        _search = value;
+        if (_table is not null)
+            await _table.ReloadServerData();
+    }
 
     private async Task OpenCreateDialog()
     {
-        var d = DialogService.Show<ContactFormDialog>("Ny kontakt", new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true });
-        if (!(await d.Result).Canceled) await LoadAsync();
+        var d = DialogService.Show<ContactFormDialog>("Ny kontakt",
+            new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true });
+
+        if (!(await d.Result).Canceled && _table is not null)
+            await _table.ReloadServerData();
     }
 
     private async Task OpenEditDialog(ContactListDto contact)
     {
-        var d = DialogService.Show<ContactFormDialog>("Redigera", new DialogParameters { ["ContactId"] = contact.Id }, new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true });
-        if (!(await d.Result).Canceled) await LoadAsync();
+        var d = DialogService.Show<ContactFormDialog>("Redigera",
+            new DialogParameters { ["ContactId"] = contact.Id },
+            new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true });
+
+        if (!(await d.Result).Canceled && _table is not null)
+            await _table.ReloadServerData();
     }
 
     private async Task DeleteContact(ContactListDto contact)
     {
         var p = new DialogParameters { ["Title"] = "Ta bort kontakt", ["Message"] = $"Ta bort {contact.Name}?" };
         var confirm = DialogService.Show<ConfirmDialog>("", p);
+
         if ((await confirm.Result).Canceled) return;
+
         var res = await Api.DeleteContactAsync(contact.Id);
-        if (res.Success) { Snackbar.Add($"{contact.Name} borttagen.", Severity.Success); await LoadAsync(); }
-        else Snackbar.Add(res.Errors.FirstOrDefault() ?? "Fel.", Severity.Error);
+        if (res.Success)
+        {
+            Snackbar.Add($"{contact.Name} borttagen.", Severity.Success);
+            if (_table is not null) await _table.ReloadServerData();
+        }
+        else
+        {
+            Snackbar.Add(res.Errors.FirstOrDefault() ?? "Ett fel uppstod.", Severity.Error);
+        }
     }
 
     private async Task ExportCsv()
     {
         var res = await Api.ExportContactsCsvAsync();
-        if (!res.Success) Snackbar.Add(res.Errors.FirstOrDefault() ?? "Export misslyckades.", Severity.Error);
+        if (!res.Success)
+            Snackbar.Add(res.Errors.FirstOrDefault() ?? "Export misslyckades.", Severity.Error);
     }
 
     private async Task OpenImportDialog()
     {
-        var d = DialogService.Show<ImportContactsDialog>("Importera", new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true });
-        if (!(await d.Result).Canceled) await LoadAsync();
+        var d = DialogService.Show<ImportContactsDialog>("Importera",
+            new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true });
+
+        if (!(await d.Result).Canceled && _table is not null)
+            await _table.ReloadServerData();
     }
 }
