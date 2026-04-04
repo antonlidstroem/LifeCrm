@@ -1,4 +1,6 @@
+using LifeCrm.Application.Common.Exceptions;
 using LifeCrm.Application.Interactions.DTOs;
+using LifeCrm.Core.Entities;
 using LifeCrm.Core.Interfaces;
 using MediatR;
 
@@ -6,7 +8,7 @@ namespace LifeCrm.Application.Interactions.Queries
 {
     internal static class InteractionMapper
     {
-        internal static InteractionDto Map(Core.Entities.Interaction i) => new()
+        internal static InteractionDto Map(Interaction i) => new()
         {
             Id            = i.Id,
             Type          = i.Type,
@@ -24,6 +26,28 @@ namespace LifeCrm.Application.Interactions.Queries
         };
     }
 
+    // FIXED: Added GetInteractionByIdQuery so the edit dialog can load a single interaction
+    public class GetInteractionByIdQuery : IRequest<InteractionDto>
+    {
+        public Guid InteractionId { get; }
+        public GetInteractionByIdQuery(Guid id) { InteractionId = id; }
+    }
+
+    public sealed class GetInteractionByIdHandler
+        : IRequestHandler<GetInteractionByIdQuery, InteractionDto>
+    {
+        private readonly IUnitOfWork _uow;
+        public GetInteractionByIdHandler(IUnitOfWork uow) { _uow = uow; }
+
+        public async Task<InteractionDto> Handle(
+            GetInteractionByIdQuery q, CancellationToken ct)
+        {
+            var i = await _uow.Interactions.GetByIdAsync(q.InteractionId, ct)
+                ?? throw new NotFoundException(nameof(Interaction), q.InteractionId);
+            return InteractionMapper.Map(i);
+        }
+    }
+
     public class GetInteractionsByContactQuery : IRequest<IReadOnlyList<InteractionDto>>
     {
         public Guid ContactId { get; }
@@ -39,7 +63,6 @@ namespace LifeCrm.Application.Interactions.Queries
         public async Task<IReadOnlyList<InteractionDto>> Handle(
             GetInteractionsByContactQuery q, CancellationToken ct)
         {
-            // FIXED: Take(200) guards against loading unbounded interactions into memory.
             var list = await _uow.InteractionRepo.GetByContactAsync(q.ContactId, ct);
             return list.Take(200).Select(InteractionMapper.Map).ToList().AsReadOnly();
         }

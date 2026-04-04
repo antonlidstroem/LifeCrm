@@ -1,6 +1,7 @@
 using LifeCrm.Application.Common.DTOs;
 using LifeCrm.Application.Interactions.Commands;
 using LifeCrm.Application.Interactions.DTOs;
+using LifeCrm.Application.Interactions.Queries;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -9,6 +10,12 @@ namespace LifeCrm.Api.Controllers.v1
 {
     public class InteractionsController : ApiControllerBase
     {
+        // FIXED: Added GetById so the edit dialog can pre-fill interaction data
+        [HttpGet("{id:guid}")]
+        [ProducesResponseType(typeof(ApiResponse<InteractionDto>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
+            => OkResponse(await Mediator.Send(new GetInteractionByIdQuery(id), ct));
+
         [HttpPost]
         [Authorize(Policy = "CanWrite")]
         [ProducesResponseType(typeof(ApiResponse<Guid>), StatusCodes.Status201Created)]

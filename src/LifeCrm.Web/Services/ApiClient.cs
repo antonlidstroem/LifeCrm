@@ -280,6 +280,10 @@ namespace LifeCrm.Web.Services
             => await DeleteAsync($"api/v1/projects/{id}");
 
         // ── INTERACTIONS ────────────────────────────────────────────────────────
+        // FIXED: Added GetInteractionAsync for the interaction edit dialog
+        public async Task<ApiResponse<InteractionDto>> GetInteractionAsync(Guid id)
+            => await GetAsync<InteractionDto>($"api/v1/interactions/{id}");
+
         public async Task<ApiResponse<IReadOnlyList<InteractionDto>>> GetInteractionsAsync(Guid contactId)
             => await GetAsync<IReadOnlyList<InteractionDto>>($"api/v1/contacts/{contactId}/interactions");
 

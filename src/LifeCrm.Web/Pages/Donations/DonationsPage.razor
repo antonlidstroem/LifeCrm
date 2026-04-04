@@ -1,4 +1,5 @@
 @page "/donations"
+@using LifeCrm.Web.Components.Shared
 @inject ApiClient Api
 @inject AppState AppState
 @inject IDialogService DialogService
@@ -7,74 +8,136 @@
 <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
     <MudText Typo="Typo.h4">Gåvor</MudText>
     <MudSpacer />
-    @if (AppState.IsFinanceOrAdmin) { <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">Ny gåva</MudButton> }
+    @if (AppState.IsFinanceOrAdmin)
+    { <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">Ny gåva</MudButton> }
 </MudStack>
 
 <MudPaper Elevation="0" Class="mb-4 pa-3" Style="border:1px solid var(--mud-palette-divider);border-radius:8px;">
     <MudGrid Spacing="2" AlignItems="AlignItems.Center">
-        <MudItem xs="12" sm="4"><MudDatePicker @bind-Date="_fromDate" Label="Fr.o.m." Variant="Variant.Outlined" Editable="true" Clearable="true" /></MudItem>
-        <MudItem xs="12" sm="4"><MudDatePicker @bind-Date="_toDate"   Label="T.o.m." Variant="Variant.Outlined" Editable="true" Clearable="true" /></MudItem>
-        <MudItem xs="12" sm="4"><MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.FilterList" OnClick="LoadAsync" FullWidth="true">Filtrera</MudButton></MudItem>
+        <MudItem xs="12" sm="4">
+            <MudDatePicker @bind-Date="_fromDate" Label="Fr.o.m." Variant="Variant.Outlined"
+                           Editable="true" Clearable="true" />
+        </MudItem>
+        <MudItem xs="12" sm="4">
+            <MudDatePicker @bind-Date="_toDate" Label="T.o.m." Variant="Variant.Outlined"
+                           Editable="true" Clearable="true" />
+        </MudItem>
+        <MudItem xs="12" sm="4">
+            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.FilterList"
+                       OnClick="ApplyFilter" FullWidth="true">Filtrera</MudButton>
+        </MudItem>
     </MudGrid>
 </MudPaper>
 
-@if (_loading) { <LoadingSkeleton Rows="8" /> }
-else if (!_donations.Any()) { <EmptyState Title="Inga gåvor hittades" Icon="@Icons.Material.Outlined.AttachMoney" /> }
-else
-{
-    <MudTable T="DonationListDto" Items="_donations" Hover="true" Dense="true">
-        <HeaderContent><MudTh>Datum</MudTh><MudTh>Givare</MudTh><MudTh>Belopp</MudTh><MudTh>Kampanj/Projekt</MudTh><MudTh>Status</MudTh><MudTh Style="width:110px"></MudTh></HeaderContent>
-        <RowTemplate>
-            <MudTd>@context.Date.ToString("yyyy-MM-dd")</MudTd>
-            <MudTd>@context.ContactName</MudTd>
-            <MudTd>$@context.Amount.ToString("N2")</MudTd>
-            <MudTd>@(context.CampaignName ?? context.ProjectName ?? "—")</MudTd>
-            <MudTd><MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="@context.Status.ToMudColor()">@context.Status</MudChip></MudTd>
-            <MudTd Style="white-space:nowrap">
-                @if (AppState.IsFinanceOrAdmin) { <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => OpenEditDialog(context))" /> }
-                @if (AppState.IsAdmin)          { <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => DeleteDonation(context))" /> }
-            </MudTd>
-        </RowTemplate>
-        <PagerContent><MudTablePager PageSizeOptions="new int[]{25,50,100}" /></PagerContent>
-    </MudTable>
-}
+@* FIXED: MudTable with ServerData for true server-side pagination *@
+<MudTable T="DonationListDto"
+          ServerData="ServerReload"
+          @ref="_table"
+          Hover="true" Dense="true">
+    <HeaderContent>
+        <MudTh>Datum</MudTh>
+        <MudTh>Givare</MudTh>
+        <MudTh>Belopp</MudTh>
+        <MudTh>Kampanj/Projekt</MudTh>
+        <MudTh>Status</MudTh>
+        <MudTh Style="width:110px"></MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd>@context.Date.ToString("yyyy-MM-dd")</MudTd>
+        <MudTd>@context.ContactName</MudTd>
+        <MudTd>$@context.Amount.ToString("N2")</MudTd>
+        <MudTd>@(context.CampaignName ?? context.ProjectName ?? "—")</MudTd>
+        <MudTd>
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="@context.Status.ToMudColor()">
+                @context.Status
+            </MudChip>
+        </MudTd>
+        <MudTd Style="white-space:nowrap">
+            @if (AppState.IsFinanceOrAdmin)
+            { <MudIconButton Icon="@Icons.Material.Filled.Edit"   Size="Size.Small"              OnClick="@(() => OpenEditDialog(context))" /> }
+            @if (AppState.IsAdmin)
+            { <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => DeleteDonation(context))" /> }
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <EmptyState Title="Inga gåvor hittades" Icon="@Icons.Material.Outlined.AttachMoney" />
+    </NoRecordsContent>
+    <LoadingContent>
+        <LoadingSkeleton Rows="6" />
+    </LoadingContent>
+    <PagerContent>
+        <MudTablePager PageSizeOptions="new int[]{25, 50, 100}" />
+    </PagerContent>
+</MudTable>
 
 @code {
-    private IReadOnlyList<DonationListDto> _donations = Array.Empty<DonationListDto>();
-    private bool _loading = true;
+    private MudTable<DonationListDto>? _table;
     private DateTime? _fromDate, _toDate;
 
-    protected override async Task OnInitializedAsync() => await LoadAsync();
+    protected override void OnInitialized() { /* table auto-loads via ServerData */ }
 
-    private async Task LoadAsync()
+    private async Task<TableData<DonationListDto>> ServerReload(TableState state, CancellationToken ct)
     {
-        _loading = true;
-        var res = await Api.GetDonationsAsync(new PaginationParams { PageSize = 200 },
-            fromDate: _fromDate.HasValue ? DateOnly.FromDateTime(_fromDate.Value) : null,
-            toDate:   _toDate.HasValue   ? DateOnly.FromDateTime(_toDate.Value)   : null);
-        _donations = res.Data?.Items ?? Array.Empty<DonationListDto>();
-        _loading   = false;
+        var from = _fromDate.HasValue ? DateOnly.FromDateTime(_fromDate.Value) : (DateOnly?)null;
+        var to   = _toDate.HasValue   ? DateOnly.FromDateTime(_toDate.Value)   : (DateOnly?)null;
+
+        var res = await Api.GetDonationsAsync(
+            new PaginationParams
+            {
+                Page          = state.Page + 1,   // MudTable 0-based → API 1-based
+                PageSize      = state.PageSize,
+                SortBy        = state.SortLabel,
+                SortAscending = state.SortDirection != MudBlazor.SortDirection.Descending
+            },
+            fromDate: from,
+            toDate:   to);
+
+        var paged = res.Data;
+        return new TableData<DonationListDto>
+        {
+            Items      = paged?.Items ?? Array.Empty<DonationListDto>(),
+            TotalItems = paged?.TotalCount ?? 0
+        };
+    }
+
+    private async Task ApplyFilter()
+    {
+        if (_table is not null) await _table.ReloadServerData();
     }
 
     private async Task OpenCreateDialog()
     {
-        var d = DialogService.Show<DonationFormDialog>("Ny gåva", new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true });
-        if (!(await d.Result).Canceled) await LoadAsync();
+        var d = DialogService.Show<DonationFormDialog>("Ny gåva",
+            new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true });
+        if (!(await d.Result).Canceled && _table is not null)
+            await _table.ReloadServerData();
     }
 
     private async Task OpenEditDialog(DonationListDto donation)
     {
-        var d = DialogService.Show<DonationFormDialog>("Redigera gåva", new DialogParameters { ["DonationId"] = donation.Id }, new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true });
-        if (!(await d.Result).Canceled) await LoadAsync();
+        var d = DialogService.Show<DonationFormDialog>("Redigera gåva",
+            new DialogParameters { ["DonationId"] = donation.Id },
+            new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true });
+        if (!(await d.Result).Canceled && _table is not null)
+            await _table.ReloadServerData();
     }
 
     private async Task DeleteDonation(DonationListDto donation)
     {
-        var p = new DialogParameters { ["Title"] = "Ta bort gåva", ["Message"] = $"Ta bort gåvan på ${donation.Amount:N2}?" };
+        var p = new DialogParameters
+        {
+            ["Title"]   = "Ta bort gåva",
+            ["Message"] = $"Ta bort gåvan på ${donation.Amount:N2}?"
+        };
         var confirm = DialogService.Show<ConfirmDialog>("", p);
         if ((await confirm.Result).Canceled) return;
+
         var res = await Api.DeleteDonationAsync(donation.Id);
-        if (res.Success) { Snackbar.Add("Borttagen.", Severity.Success); await LoadAsync(); }
+        if (res.Success)
+        {
+            Snackbar.Add("Borttagen.", Severity.Success);
+            if (_table is not null) await _table.ReloadServerData();
+        }
         else Snackbar.Add(res.Errors.FirstOrDefault() ?? "Fel.", Severity.Error);
     }
 }
