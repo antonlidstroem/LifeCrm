@@ -2,43 +2,70 @@
 @inject ISnackbar Snackbar
 
 <MudDialog>
-    <TitleContent><MudText Typo="Typo.h6"><MudIcon Icon="@(_isEdit ? Icons.Material.Filled.Edit : Icons.Material.Filled.Add)" Class="mr-2 mb-n1" />@(_isEdit ? "Redigera gåva" : "Ny gåva")</MudText></TitleContent>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@(_isEdit ? Icons.Material.Filled.Edit : Icons.Material.Filled.Add)" Class="mr-2 mb-n1" />
+            @(_isEdit ? "Redigera gåva" : "Ny gåva")
+        </MudText>
+    </TitleContent>
     <DialogContent>
         <MudGrid Spacing="2">
             @if (!_isEdit && !PresetContactId.HasValue)
             {
                 <MudItem xs="12">
-                    <MudAutocomplete T="ContactListDto" Label="Givare *" Variant="Variant.Outlined" @bind-Value="_selectedContact"
-                                     SearchFunc="SearchContacts" ToStringFunc="@(c => c?.Name ?? string.Empty)" MinCharacters="1" />
+                    <MudAutocomplete T="ContactListDto" Label="Givare *" Variant="Variant.Outlined"
+                                     @bind-Value="_selectedContact"
+                                     SearchFunc="SearchContacts"
+                                     ToStringFunc="@(c => c?.Name ?? string.Empty)"
+                                     MinCharacters="1" />
                 </MudItem>
             }
-            <MudItem xs="12" sm="6"><MudNumericField @bind-Value="_amount" Label="Belopp *" Variant="Variant.Outlined" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.AttachMoney" HideSpinButtons="true" Min="0.01m" /></MudItem>
-            <MudItem xs="12" sm="6"><MudDatePicker @bind-Date="_date" Label="Datum *" Variant="Variant.Outlined" Editable="true" /></MudItem>
             <MudItem xs="12" sm="6">
+                <MudNumericField @bind-Value="_amount" Label="Belopp *" Variant="Variant.Outlined"
+                                 Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.AttachMoney"
+                                 HideSpinButtons="true" Min="0.01m" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudDatePicker @bind-Date="_date" Label="Datum *" Variant="Variant.Outlined" Editable="true" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                @* FIXED: All DonationStatus values present. Refunded/Voided were missing —
+                   existing DB records with those statuses couldn't be preserved on edit. *@
                 <MudSelect T="string" @bind-Value="_status" Label="Status" Variant="Variant.Outlined">
                     <MudSelectItem Value="@("Confirmed")">Bekräftad</MudSelectItem>
                     <MudSelectItem Value="@("Pending")">Väntande</MudSelectItem>
+                    <MudSelectItem Value="@("Refunded")">Återbetald</MudSelectItem>
+                    <MudSelectItem Value="@("Voided")">Ogiltigförklarad</MudSelectItem>
                     <MudSelectItem Value="@("Cancelled")">Avbruten</MudSelectItem>
                 </MudSelect>
             </MudItem>
             <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_paymentMethod" Label="Betalningsmetod" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
                 <MudSelect T="Guid?" @bind-Value="_campaignId" Label="Kampanj" Variant="Variant.Outlined" Clearable="true">
                     <MudSelectItem T="Guid?" Value="null">Ingen kampanj</MudSelectItem>
-                    @foreach (var c in _campaigns) { <MudSelectItem T="Guid?" Value="@c.Id">@c.Name</MudSelectItem> }
+                    @foreach (var c in _campaigns)
+                    { <MudSelectItem T="Guid?" Value="@c.Id">@c.Name</MudSelectItem> }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="Guid?" @bind-Value="_projectId" Label="Projekt" Variant="Variant.Outlined" Clearable="true">
+                    <MudSelectItem T="Guid?" Value="null">Inget projekt</MudSelectItem>
+                    @foreach (var p in _projects)
+                    { <MudSelectItem T="Guid?" Value="@p.Id">@p.Name</MudSelectItem> }
                 </MudSelect>
             </MudItem>
             <MudItem xs="12">
-                <MudSelect T="Guid?" @bind-Value="_projectId" Label="Projekt" Variant="Variant.Outlined" Clearable="true">
-                    <MudSelectItem T="Guid?" Value="null">Inget projekt</MudSelectItem>
-                    @foreach (var p in _projects) { <MudSelectItem T="Guid?" Value="@p.Id">@p.Name</MudSelectItem> }
-                </MudSelect>
+                <MudTextField @bind-Value="_notes" Label="Anteckning" Variant="Variant.Outlined" Lines="2" />
             </MudItem>
-            <MudItem xs="12"><MudTextField @bind-Value="_notes" Label="Anteckning" Variant="Variant.Outlined" Lines="2" /></MudItem>
         </MudGrid>
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel" Variant="Variant.Text">Avbryt</MudButton>
-        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit" Disabled="_saving">@(_saving ? "Sparar…" : (_isEdit ? "Spara" : "Skapa"))</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit" Disabled="_saving">
+            @(_saving ? "Sparar…" : (_isEdit ? "Spara" : "Skapa"))
+        </MudButton>
     </DialogActions>
 </MudDialog>
 
@@ -47,13 +74,12 @@
     [Parameter] public Guid? DonationId      { get; set; }
     [Parameter] public Guid? PresetContactId { get; set; }
 
-    private bool _isEdit, _saving;
+    private bool   _isEdit, _saving;
     private decimal _amount = 0;
     private DateTime? _date = DateTime.Today;
-    private string _status = "Confirmed", _notes = string.Empty;
+    private string _status = "Confirmed", _notes = string.Empty, _paymentMethod = string.Empty;
     private Guid? _projectId, _campaignId;
-    // FIX: store original ContactId — UpdateDonationRequest.ContactId has NotEmpty() validation
-    private Guid _originalContactId;
+    private Guid _originalContactId;      // preserved for UpdateDonationRequest validation
     private ContactListDto? _selectedContact;
     private List<ProjectListDto>  _projects  = new();
     private List<CampaignListDto> _campaigns = new();
@@ -61,18 +87,24 @@
     protected override async Task OnInitializedAsync()
     {
         _isEdit = DonationId.HasValue;
-        var pt = Api.GetProjectsAsync(new PaginationParams { PageSize = 100 });
+        var pt = Api.GetProjectsAsync(new PaginationParams  { PageSize = 100 });
         var ct = Api.GetCampaignsAsync(new PaginationParams { PageSize = 100 });
         await Task.WhenAll(pt, ct);
         _projects  = pt.Result.Data?.Items.ToList() ?? new();
         _campaigns = ct.Result.Data?.Items.ToList() ?? new();
+
         if (!_isEdit) return;
         var res = await Api.GetDonationAsync(DonationId!.Value);
         if (res.Data is null) return;
         var d = res.Data;
-        _originalContactId = d.ContactId; // FIX: captured so UpdateDonationRequest is valid
-        _amount = d.Amount; _date = d.Date.ToDateTime(TimeOnly.MinValue);
-        _status = d.Status.ToString(); _projectId = d.ProjectId; _campaignId = d.CampaignId; _notes = d.Notes ?? string.Empty;
+        _originalContactId = d.ContactId;
+        _amount            = d.Amount;
+        _date              = d.Date.ToDateTime(TimeOnly.MinValue);
+        _status            = d.Status.ToString();
+        _projectId         = d.ProjectId;
+        _campaignId        = d.CampaignId;
+        _paymentMethod     = d.PaymentMethod ?? string.Empty;
+        _notes             = d.Notes ?? string.Empty;
     }
 
     private async Task<IEnumerable<ContactListDto>> SearchContacts(string search, CancellationToken ct)
@@ -83,8 +115,11 @@
 
     private async Task Submit()
     {
-        if (_amount <= 0) { Snackbar.Add("Ange ett belopp över 0.", Severity.Warning); return; }
-        if (!_isEdit && !PresetContactId.HasValue && _selectedContact is null) { Snackbar.Add("Välj en givare.", Severity.Warning); return; }
+        if (_amount <= 0)
+        { Snackbar.Add("Ange ett belopp över 0.", Severity.Warning); return; }
+        if (!_isEdit && !PresetContactId.HasValue && _selectedContact is null)
+        { Snackbar.Add("Välj en givare.", Severity.Warning); return; }
+
         _saving = true;
         try
         {
@@ -92,11 +127,15 @@
             {
                 var req = new UpdateDonationRequest
                 {
-                    Id = DonationId!.Value,
-                    ContactId  = _originalContactId, // FIX: pass original value — omitting caused 400 Bad Request
-                    Amount     = _amount, Date = DateOnly.FromDateTime(_date ?? DateTime.Today),
-                    Status     = Enum.Parse<DonationStatus>(_status),
-                    ProjectId  = _projectId, CampaignId = _campaignId, Notes = _notes.NullIfEmpty()
+                    Id            = DonationId!.Value,
+                    ContactId     = _originalContactId,   // required by validator
+                    Amount        = _amount,
+                    Date          = DateOnly.FromDateTime(_date ?? DateTime.Today),
+                    Status        = Enum.Parse<DonationStatus>(_status),
+                    ProjectId     = _projectId,
+                    CampaignId    = _campaignId,
+                    PaymentMethod = _paymentMethod.NullIfEmpty(),
+                    Notes         = _notes.NullIfEmpty()
                 };
                 var res = await Api.UpdateDonationAsync(DonationId!.Value, req);
                 if (res.Success) { Snackbar.Add("Gåvan har uppdaterats.", Severity.Success); MudDialog.Close(DialogResult.Ok(true)); }
@@ -106,17 +145,22 @@
             {
                 var req = new CreateDonationRequest
                 {
-                    ContactId  = PresetContactId ?? _selectedContact!.Id,
-                    Amount     = _amount, Date = DateOnly.FromDateTime(_date ?? DateTime.Today),
-                    Status     = Enum.Parse<DonationStatus>(_status),
-                    ProjectId  = _projectId, CampaignId = _campaignId, Notes = _notes.NullIfEmpty()
+                    ContactId     = PresetContactId ?? _selectedContact!.Id,
+                    Amount        = _amount,
+                    Date          = DateOnly.FromDateTime(_date ?? DateTime.Today),
+                    Status        = Enum.Parse<DonationStatus>(_status),
+                    ProjectId     = _projectId,
+                    CampaignId    = _campaignId,
+                    PaymentMethod = _paymentMethod.NullIfEmpty(),
+                    Notes         = _notes.NullIfEmpty()
                 };
                 var res = await Api.CreateDonationAsync(req);
                 if (res.Success) { Snackbar.Add("Gåvan har skapats.", Severity.Success); MudDialog.Close(DialogResult.Ok(res.Data)); }
                 else Snackbar.Add(res.Errors.FirstOrDefault() ?? "Fel.", Severity.Error);
             }
         }
-        finally { _saving = false; } // FIX: always reset — prevents button freeze on exception
+        finally { _saving = false; }
     }
+
     private void Cancel() => MudDialog.Cancel();
 }

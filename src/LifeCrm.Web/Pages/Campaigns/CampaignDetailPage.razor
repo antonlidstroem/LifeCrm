@@ -1,15 +1,27 @@
 @page "/campaigns/{Id:guid}"
+@using LifeCrm.Web.Components.Dialogs
 @inject ApiClient Api
 @inject AppState AppState
 @inject IDialogService DialogService
 @inject NavigationManager Nav
+using LifeCrm.Web.Components;
+using LifeCrm.Web.Components.Dialogs;
 
 <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
     <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Nav.NavigateTo("/campaigns"))" />
     <MudText Typo="Typo.h5">@(_campaign?.Name ?? "Laddar…")</MudText>
     <MudSpacer />
     @if (AppState.CanWrite && _campaign is not null)
-    { <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Edit" OnClick="OpenEditDialog">Redigera</MudButton> }
+    { <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Edit" OnClick="OpenEditDialog" Class="mr-2">Redigera</MudButton> }
+    @if (AppState.IsFinanceOrAdmin && _campaign is not null)
+    {
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Secondary"
+                   StartIcon="@Icons.Material.Filled.Email"
+                   OnClick="OpenNewsletterDialog">
+            Skicka nyhetsbrev
+        </MudButton>
+    }
 </MudStack>
 
 @if (_loading) { <MudProgressLinear Color="Color.Primary" Indeterminate="true" /> }
@@ -19,16 +31,31 @@ else if (_campaign is not null)
         <MudItem xs="12" md="4">
             <MudCard Elevation="2">
                 <MudCardContent>
-                    <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="@_campaign.Status.ToMudColor()" Class="mb-3">@_campaign.Status</MudChip>
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Text"
+                             Color="@_campaign.Status.ToMudColor()" Class="mb-3">
+                        @_campaign.Status
+                    </MudChip>
                     @if (_campaign.BudgetGoal.HasValue && _campaign.BudgetGoal > 0)
                     {
                         var pct = Math.Min((double)(_campaign.ProgressPercent ?? 0), 100);
-                        <MudProgressLinear Value="@pct" Color="Color.Primary" Size="Size.Medium" Rounded="true" Class="mb-2" />
+                        <MudProgressLinear Value="@pct" Color="Color.Primary" Size="Size.Medium"
+                                           Rounded="true" Class="mb-2" />
                     }
                     <MudStack Row="true" Justify="Justify.SpaceBetween" Class="mb-3">
-                        <div><MudText Typo="Typo.caption" Color="Color.Secondary">Insamlat</MudText><MudText Typo="Typo.h6">$@_campaign.TotalRaised.ToString("N2")</MudText></div>
-                        <div><MudText Typo="Typo.caption" Color="Color.Secondary">Mål</MudText><MudText Typo="Typo.h6">@(_campaign.BudgetGoal.HasValue ? $"${_campaign.BudgetGoal:N2}" : "—")</MudText></div>
-                        <div><MudText Typo="Typo.caption" Color="Color.Secondary">Gåvor</MudText><MudText Typo="Typo.h6">@_campaign.DonationCount</MudText></div>
+                        <div>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Insamlat</MudText>
+                            <MudText Typo="Typo.h6">$@_campaign.TotalRaised.ToString("N2")</MudText>
+                        </div>
+                        <div>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Mål</MudText>
+                            <MudText Typo="Typo.h6">
+                                @(_campaign.BudgetGoal.HasValue ? $"${_campaign.BudgetGoal:N2}" : "—")
+                            </MudText>
+                        </div>
+                        <div>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Gåvor</MudText>
+                            <MudText Typo="Typo.h6">@_campaign.DonationCount</MudText>
+                        </div>
                     </MudStack>
                     @if (!string.IsNullOrEmpty(_campaign.Description))
                     {
@@ -45,9 +72,14 @@ else if (_campaign is not null)
                 </MudCardContent>
             </MudCard>
         </MudItem>
+
         <MudItem xs="12" md="8">
             <MudCard Elevation="2">
-                <MudCardHeader><CardHeaderContent><MudText Typo="Typo.h6">Kopplade gåvor</MudText></CardHeaderContent></MudCardHeader>
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">Kopplade gåvor</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
                 <MudCardContent>
                     @if (!_donations.Any())
                     { <EmptyState Title="Inga gåvor kopplade" Icon="@Icons.Material.Outlined.AttachMoney" /> }
@@ -55,15 +87,29 @@ else if (_campaign is not null)
                     {
                         <MudTable T="DonationListDto" Items="_donations" Dense="true" Hover="true" Elevation="0">
                             <HeaderContent>
-                                <MudTh>Datum</MudTh><MudTh>Givare</MudTh><MudTh>Belopp</MudTh><MudTh>Status</MudTh>
+                                <MudTh>Datum</MudTh>
+                                <MudTh>Givare</MudTh>
+                                <MudTh>Belopp</MudTh>
+                                <MudTh>Status</MudTh>
                             </HeaderContent>
                             <RowTemplate>
                                 <MudTd>@context.Date.ToString("yyyy-MM-dd")</MudTd>
-                                <MudTd><MudLink Href="@($"/contacts/{context.ContactId}")">@context.ContactName</MudLink></MudTd>
+                                <MudTd>
+                                    <MudLink Href="@($"/contacts/{context.ContactId}")">
+                                        @context.ContactName
+                                    </MudLink>
+                                </MudTd>
                                 <MudTd>$@context.Amount.ToString("N2")</MudTd>
-                                <MudTd><MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="@context.Status.ToMudColor()">@context.Status</MudChip></MudTd>
+                                <MudTd>
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Text"
+                                             Color="@context.Status.ToMudColor()">
+                                        @context.Status
+                                    </MudChip>
+                                </MudTd>
                             </RowTemplate>
-                            <PagerContent><MudTablePager PageSizeOptions="new int[]{25,50}" /></PagerContent>
+                            <PagerContent>
+                                <MudTablePager PageSizeOptions="new int[]{25,50}" />
+                            </PagerContent>
                         </MudTable>
                     }
                 </MudCardContent>
@@ -84,9 +130,6 @@ else if (_campaign is not null)
     {
         _loading = true;
         var campaignTask  = Api.GetCampaignAsync(Id);
-        // FIXED: Filter donations by campaignId on the server, not by name string client-side.
-        // Old code: t2.Result.Data?.Items.Where(d => d.CampaignName == _campaign?.Name)
-        // This was fragile (string match), loaded ALL donations, and could mismatch on name collision.
         var donationsTask = Api.GetDonationsAsync(new PaginationParams { PageSize = 500 }, campaignId: Id);
         await Task.WhenAll(campaignTask, donationsTask);
         _campaign  = campaignTask.Result.Data;
@@ -96,8 +139,28 @@ else if (_campaign is not null)
 
     private async Task OpenEditDialog()
     {
-        var d = DialogService.Show<CampaignFormDialog>("Redigera", new DialogParameters { ["CampaignId"] = Id },
+        var d = DialogService.Show<CampaignFormDialog>("Redigera",
+            new DialogParameters { ["CampaignId"] = Id },
             new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true });
         if (!(await d.Result).Canceled) await LoadAsync();
+    }
+
+    private async Task OpenNewsletterDialog()
+    {
+        var d = DialogService.Show<SendNewsletterDialog>("Skicka nyhetsbrev",
+            new DialogParameters
+            {
+                ["CampaignId"]   = Id,
+                ["CampaignName"] = _campaign?.Name ?? string.Empty
+            },
+            new DialogOptions
+            {
+                CloseButton  = true,
+                MaxWidth     = MaxWidth.Medium,
+                FullWidth    = true,
+                // Don't close on backdrop click — user may be mid-composition
+                BackdropClick = false
+            });
+        await d.Result; // no reload needed — newsletter doesn't change campaign data
     }
 }

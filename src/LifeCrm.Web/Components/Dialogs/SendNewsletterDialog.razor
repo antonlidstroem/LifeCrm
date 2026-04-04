@@ -1,0 +1,220 @@
+@inject ApiClient Api
+@inject ISnackbar Snackbar
+
+<MudDialog Style="max-width:680px">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Email" Class="mr-2 mb-n1" />
+            Skicka nyhetsbrev — @CampaignName
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudGrid Spacing="3">
+
+            @* ── Subject ── *@
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_subject"
+                              Label="Ämne *"
+                              Variant="Variant.Outlined"
+                              HelperText="Visas i mottagarens inbox" />
+            </MudItem>
+
+            @* ── Tag filter + preview ── *@
+            <MudItem xs="12" sm="7">
+                <MudTextField @bind-Value="_tagFilter"
+                              Label="Taggar (valfritt filter)"
+                              Variant="Variant.Outlined"
+                              Adornment="Adornment.End"
+                              AdornmentIcon="@Icons.Material.Filled.FilterList"
+                              HelperText="Kommaseparerade taggar — skicka bara till kontakter med dessa taggar"
+                              DebounceInterval="500"
+                              Immediate="true"
+                              TextChanged="OnTagFilterChanged" />
+            </MudItem>
+            <MudItem xs="12" sm="5" Class="d-flex align-center">
+                @if (_previewing)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Hämtar förhandsgranskning…</MudText>
+                }
+                else if (_preview is not null)
+                {
+                    <MudStack Spacing="0">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudIcon Icon="@Icons.Material.Filled.Send" Size="Size.Small" Color="Color.Success" />
+                            <MudText Typo="Typo.body2"><b>@_preview.EligibleCount</b> mottagare</MudText>
+                        </MudStack>
+                        @if (_preview.OptedOutCount > 0)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Warning">
+                                @_preview.OptedOutCount avsagda hoppas över
+                            </MudText>
+                        }
+                        @if (_preview.NoEmailCount > 0)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Default">
+                                @_preview.NoEmailCount saknar e-postadress
+                            </MudText>
+                        }
+                    </MudStack>
+                }
+            </MudItem>
+
+            @* ── HTML body ── *@
+            <MudItem xs="12">
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-1">
+                    Meddelande (HTML stöds) *
+                </MudText>
+                <MudTextField @bind-Value="_htmlBody"
+                              Variant="Variant.Outlined"
+                              Lines="12"
+                              Placeholder="&lt;p&gt;Kära supporter,&lt;/p&gt;&#10;&lt;p&gt;...&lt;/p&gt;"
+                              HelperText="Du kan använda HTML-taggar för formatering" />
+            </MudItem>
+
+            @* ── Live HTML preview ── *@
+            @if (!string.IsNullOrWhiteSpace(_htmlBody))
+            {
+                <MudItem xs="12">
+                    <MudExpansionPanels Elevation="0">
+                        <MudExpansionPanel Text="Förhandsgranska e-post" Icon="@Icons.Material.Outlined.Preview">
+                            <MudPaper Elevation="1" Class="pa-4" Style="background:#fff;border-radius:4px;">
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">
+                                    Ämne: @_subject
+                                </MudText>
+                                <MudDivider Class="mb-3" />
+                                <div style="font-family:sans-serif;color:#222;">
+                                    @((MarkupString)_htmlBody)
+                                </div>
+                            </MudPaper>
+                        </MudExpansionPanel>
+                    </MudExpansionPanels>
+                </MudItem>
+            }
+
+            @* ── Result after send ── *@
+            @if (_result is not null)
+            {
+                <MudItem xs="12">
+                    <MudAlert Severity="@(_result.ErrorCount == 0 ? Severity.Success : Severity.Warning)"
+                              Dense="true">
+                        Skickat till @_result.SentCount mottagare.
+                        @if (_result.ErrorCount > 0)
+                        {
+                            <text> @_result.ErrorCount misslyckades.</text>
+                        }
+                    </MudAlert>
+                    @if (_result.Errors.Any())
+                    {
+                        <MudExpansionPanels Class="mt-2" Elevation="0">
+                            <MudExpansionPanel Text="@($"Visa fel ({_result.ErrorCount} st)")" Dense="true">
+                                @foreach (var e in _result.Errors)
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Error" Class="d-block">@e</MudText>
+                                }
+                            </MudExpansionPanel>
+                        </MudExpansionPanels>
+                    }
+                </MudItem>
+            }
+
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Variant="Variant.Text" Disabled="_sending">Stäng</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled"
+                   StartIcon="@Icons.Material.Filled.Send"
+                   OnClick="Send"
+                   Disabled="@(_sending || _result is not null || _preview?.EligibleCount == 0)">
+            @if (_sending)
+            { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /><span>Skickar…</span> }
+            else if (_result is not null)
+            { <span>Skickat ✓</span> }
+            else if (_preview is not null)
+            { <span>Skicka till @_preview.EligibleCount kontakter</span> }
+            else
+            { <span>Skicka nyhetsbrev</span> }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public Guid   CampaignId   { get; set; }
+    [Parameter] public string CampaignName { get; set; } = string.Empty;
+
+    private string _subject   = string.Empty;
+    private string _htmlBody  = string.Empty;
+    private string _tagFilter = string.Empty;
+
+    private bool                  _previewing;
+    private bool                  _sending;
+    private NewsletterPreviewDto? _preview;
+    private NewsletterResultDto?  _result;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Pre-fill subject from campaign name
+        _subject = CampaignName;
+        // Load initial preview (all contacts)
+        await LoadPreviewAsync();
+    }
+
+    private async Task OnTagFilterChanged(string value)
+    {
+        _tagFilter = value;
+        await LoadPreviewAsync();
+    }
+
+    private async Task LoadPreviewAsync()
+    {
+        _previewing = true;
+        StateHasChanged();
+        try
+        {
+            var res = await Api.PreviewNewsletterAsync(CampaignId, _tagFilter.NullIfEmpty());
+            _preview = res.Data;
+        }
+        catch { /* preview is best-effort */ }
+        finally
+        {
+            _previewing = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task Send()
+    {
+        if (string.IsNullOrWhiteSpace(_subject))
+        { Snackbar.Add("Ämne är obligatoriskt.", Severity.Warning); return; }
+        if (string.IsNullOrWhiteSpace(_htmlBody))
+        { Snackbar.Add("Meddelandetext är obligatorisk.", Severity.Warning); return; }
+        if (_preview?.EligibleCount == 0)
+        { Snackbar.Add("Inga mottagare att skicka till.", Severity.Warning); return; }
+
+        _sending = true;
+        try
+        {
+            var req = new SendNewsletterRequest
+            {
+                Subject   = _subject,
+                HtmlBody  = _htmlBody,
+                TagFilter = _tagFilter.NullIfEmpty()
+            };
+            var res = await Api.SendNewsletterAsync(CampaignId, req);
+            if (res.Success)
+            {
+                _result = res.Data;
+                var msg = $"Nyhetsbrev skickat till {_result!.SentCount} mottagare.";
+                Snackbar.Add(msg, _result.ErrorCount == 0 ? Severity.Success : Severity.Warning);
+            }
+            else
+            {
+                Snackbar.Add(res.Errors.FirstOrDefault() ?? "Sändning misslyckades.", Severity.Error);
+            }
+        }
+        finally { _sending = false; }
+    }
+
+    private void Cancel() => MudDialog.Close(DialogResult.Ok(_result is not null));
+}

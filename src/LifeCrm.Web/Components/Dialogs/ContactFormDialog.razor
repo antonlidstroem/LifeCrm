@@ -2,58 +2,169 @@
 @inject ISnackbar Snackbar
 
 <MudDialog>
-    <TitleContent><MudText Typo="Typo.h6"><MudIcon Icon="@(_isEdit ? Icons.Material.Filled.Edit : Icons.Material.Filled.PersonAdd)" Class="mr-2 mb-n1" />@(_isEdit ? "Redigera kontakt" : "Ny kontakt")</MudText></TitleContent>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@(_isEdit ? Icons.Material.Filled.Edit : Icons.Material.Filled.PersonAdd)" Class="mr-2 mb-n1" />
+            @(_isEdit ? "Redigera kontakt" : "Ny kontakt")
+        </MudText>
+    </TitleContent>
     <DialogContent>
         <MudGrid Spacing="2">
-            <MudItem xs="12"><MudTextField @bind-Value="_name" Label="Namn *" Variant="Variant.Outlined" Required="true" /></MudItem>
-            <MudItem xs="12" sm="6"><MudSelect T="string" @bind-Value="_type" Label="Typ *" Variant="Variant.Outlined"><MudSelectItem Value="@("Individual")">Privatperson</MudSelectItem><MudSelectItem Value="@("Organization")">Organisation</MudSelectItem><MudSelectItem Value="@("Church")">Kyrka</MudSelectItem><MudSelectItem Value="@("Foundation")">Stiftelse</MudSelectItem></MudSelect></MudItem>
-            <MudItem xs="12" sm="6"><MudTextField @bind-Value="_email" Label="E-post" Variant="Variant.Outlined" InputType="InputType.Email" /></MudItem>
-            <MudItem xs="12" sm="6"><MudTextField @bind-Value="_phone" Label="Telefon" Variant="Variant.Outlined" /></MudItem>
-            <MudItem xs="12" sm="6"><MudTextField @bind-Value="_city" Label="Stad" Variant="Variant.Outlined" /></MudItem>
-            <MudItem xs="12" sm="6"><MudTextField @bind-Value="_country" Label="Land" Variant="Variant.Outlined" /></MudItem>
-            <MudItem xs="12"><MudTextField @bind-Value="_tags" Label="Taggar (kommaseparerade)" Variant="Variant.Outlined" /></MudItem>
-            <MudItem xs="12"><MudTextField @bind-Value="_notes" Label="Anteckningar" Variant="Variant.Outlined" Lines="3" /></MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_name" Label="Namn *" Variant="Variant.Outlined" Required="true" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="string" @bind-Value="_type" Label="Typ *" Variant="Variant.Outlined">
+                    <MudSelectItem Value="@("Individual")">Privatperson</MudSelectItem>
+                    <MudSelectItem Value="@("Organization")">Organisation</MudSelectItem>
+                    <MudSelectItem Value="@("Church")">Kyrka</MudSelectItem>
+                    <MudSelectItem Value="@("Foundation")">Stiftelse</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_email" Label="E-post" Variant="Variant.Outlined" InputType="InputType.Email" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_phone" Label="Telefon" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_city" Label="Stad" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_country" Label="Land" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_postalCode" Label="Postnummer" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_stateProvince" Label="Region/Stat" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_addressLine1" Label="Adress" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_addressLine2" Label="Adress rad 2" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_primaryContactName" Label="Kontaktperson" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_tags" Label="Taggar (kommaseparerade)" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_notes" Label="Anteckningar" Variant="Variant.Outlined" Lines="3" />
+            </MudItem>
+            <MudItem xs="12">
+                @* FIXED: EmailOptOut MUST be preserved — resetting it silently re-opts contacts into emails (GDPR risk) *@
+                <MudCheckBox @bind-Value="_emailOptOut" Label="Avsäg sig e-post (email opt-out)" Color="Color.Primary" />
+            </MudItem>
         </MudGrid>
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel" Variant="Variant.Text">Avbryt</MudButton>
-        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit" Disabled="_saving">@(_saving ? "Sparar…" : (_isEdit ? "Spara ändringar" : "Skapa kontakt"))</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit" Disabled="_saving">
+            @(_saving ? "Sparar…" : (_isEdit ? "Spara ändringar" : "Skapa kontakt"))
+        </MudButton>
     </DialogActions>
 </MudDialog>
 
 @code {
     [CascadingParameter] MudDialogInstance MudDialog { get; set; } = default!;
     [Parameter] public Guid? ContactId { get; set; }
-    private bool _isEdit, _saving;
-    private string _name = string.Empty, _type = "Individual", _email = string.Empty, _phone = string.Empty, _city = string.Empty, _country = string.Empty, _tags = string.Empty, _notes = string.Empty;
+
+    private bool   _isEdit, _saving;
+    private string _name = string.Empty,
+                   _type = "Individual",
+                   _email = string.Empty,
+                   _phone = string.Empty,
+                   _city = string.Empty,
+                   _country = string.Empty,
+                   _postalCode = string.Empty,
+                   _stateProvince = string.Empty,
+                   _addressLine1 = string.Empty,
+                   _addressLine2 = string.Empty,
+                   _primaryContactName = string.Empty,
+                   _tags = string.Empty,
+                   _notes = string.Empty;
+    // FIXED: EmailOptOut bound as a variable — was never loaded or sent, causing silent GDPR violations
+    private bool _emailOptOut = false;
 
     protected override async Task OnInitializedAsync()
     {
         _isEdit = ContactId.HasValue;
         if (!_isEdit) return;
+
         var res = await Api.GetContactAsync(ContactId!.Value);
         if (res.Data is null) return;
         var c = res.Data;
-        _name = c.Name; _type = c.Type.ToString(); _email = c.Email ?? string.Empty; _phone = c.Phone ?? string.Empty;
-        _city = c.City ?? string.Empty; _country = c.Country ?? string.Empty; _tags = c.Tags ?? string.Empty; _notes = c.Notes ?? string.Empty;
+
+        _name               = c.Name;
+        _type               = c.Type.ToString();
+        _email              = c.Email              ?? string.Empty;
+        _phone              = c.Phone              ?? string.Empty;
+        _city               = c.City               ?? string.Empty;
+        _country            = c.Country            ?? string.Empty;
+        _postalCode         = c.PostalCode         ?? string.Empty;   // FIXED: was silently lost
+        _stateProvince      = c.StateProvince      ?? string.Empty;   // FIXED: was silently lost
+        _addressLine1       = c.AddressLine1       ?? string.Empty;   // FIXED: was silently lost
+        _addressLine2       = c.AddressLine2       ?? string.Empty;   // FIXED: was silently lost
+        _primaryContactName = c.PrimaryContactName ?? string.Empty;   // FIXED: was silently lost
+        _tags               = c.Tags               ?? string.Empty;
+        _notes              = c.Notes              ?? string.Empty;
+        _emailOptOut        = c.EmailOptOut;                          // FIXED: GDPR critical
     }
 
     private async Task Submit()
     {
-        if (string.IsNullOrWhiteSpace(_name)) { Snackbar.Add("Namn är obligatoriskt.", Severity.Warning); return; }
+        if (string.IsNullOrWhiteSpace(_name))
+        { Snackbar.Add("Namn är obligatoriskt.", Severity.Warning); return; }
+
         _saving = true;
         try
         {
             if (_isEdit)
             {
-                var req = new UpdateContactRequest { Id = ContactId!.Value, Name = _name, Type = Enum.Parse<ContactType>(_type), Email = _email.NullIfEmpty(), Phone = _phone.NullIfEmpty(), City = _city.NullIfEmpty(), Country = _country.NullIfEmpty(), Tags = _tags.NullIfEmpty(), Notes = _notes.NullIfEmpty() };
+                var req = new UpdateContactRequest
+                {
+                    Id                 = ContactId!.Value,
+                    Name               = _name,
+                    Type               = Enum.Parse<ContactType>(_type),
+                    Email              = _email.NullIfEmpty(),
+                    Phone              = _phone.NullIfEmpty(),
+                    City               = _city.NullIfEmpty(),
+                    Country            = _country.NullIfEmpty(),
+                    PostalCode         = _postalCode.NullIfEmpty(),
+                    StateProvince      = _stateProvince.NullIfEmpty(),
+                    AddressLine1       = _addressLine1.NullIfEmpty(),
+                    AddressLine2       = _addressLine2.NullIfEmpty(),
+                    PrimaryContactName = _primaryContactName.NullIfEmpty(),
+                    Tags               = _tags.NullIfEmpty(),
+                    Notes              = _notes.NullIfEmpty(),
+                    EmailOptOut        = _emailOptOut
+                };
                 var res = await Api.UpdateContactAsync(ContactId!.Value, req);
                 if (res.Success) { Snackbar.Add("Kontakten har uppdaterats.", Severity.Success); MudDialog.Close(DialogResult.Ok(true)); }
                 else Snackbar.Add(res.Errors.FirstOrDefault() ?? "Fel.", Severity.Error);
             }
             else
             {
-                var req = new CreateContactRequest { Name = _name, Type = Enum.Parse<ContactType>(_type), Email = _email.NullIfEmpty(), Phone = _phone.NullIfEmpty(), City = _city.NullIfEmpty(), Country = _country.NullIfEmpty(), Tags = _tags.NullIfEmpty(), Notes = _notes.NullIfEmpty() };
+                var req = new CreateContactRequest
+                {
+                    Name               = _name,
+                    Type               = Enum.Parse<ContactType>(_type),
+                    Email              = _email.NullIfEmpty(),
+                    Phone              = _phone.NullIfEmpty(),
+                    City               = _city.NullIfEmpty(),
+                    Country            = _country.NullIfEmpty(),
+                    PostalCode         = _postalCode.NullIfEmpty(),
+                    StateProvince      = _stateProvince.NullIfEmpty(),
+                    AddressLine1       = _addressLine1.NullIfEmpty(),
+                    AddressLine2       = _addressLine2.NullIfEmpty(),
+                    PrimaryContactName = _primaryContactName.NullIfEmpty(),
+                    Tags               = _tags.NullIfEmpty(),
+                    Notes              = _notes.NullIfEmpty(),
+                    EmailOptOut        = _emailOptOut
+                };
                 var res = await Api.CreateContactAsync(req);
                 if (res.Success) { Snackbar.Add("Kontakten har skapats.", Severity.Success); MudDialog.Close(DialogResult.Ok(res.Data)); }
                 else Snackbar.Add(res.Errors.FirstOrDefault() ?? "Fel.", Severity.Error);
@@ -61,5 +172,6 @@
         }
         finally { _saving = false; }
     }
+
     private void Cancel() => MudDialog.Cancel();
 }

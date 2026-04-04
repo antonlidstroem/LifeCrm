@@ -46,5 +46,29 @@ namespace LifeCrm.Api.Controllers.v1
             await Mediator.Send(new DeleteCampaignCommand(id), ct);
             return NoContentResponse();
         }
+
+        // ── Newsletter ────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Preview how many contacts would receive a newsletter from this campaign,
+        /// optionally filtered by tag.
+        /// </summary>
+        [HttpGet("{id:guid}/newsletter/preview")]
+        [Authorize(Policy = "FinanceOrAdmin")]
+        [ProducesResponseType(typeof(ApiResponse<NewsletterPreviewDto>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> PreviewNewsletter(
+            Guid id, [FromQuery] string? tagFilter, CancellationToken ct)
+            => OkResponse(await Mediator.Send(new PreviewNewsletterCommand(id, tagFilter), ct));
+
+        /// <summary>
+        /// Send a newsletter email to all opted-in contacts in this organisation
+        /// (optionally filtered by tag).
+        /// </summary>
+        [HttpPost("{id:guid}/newsletter/send")]
+        [Authorize(Policy = "FinanceOrAdmin")]
+        [ProducesResponseType(typeof(ApiResponse<NewsletterResultDto>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> SendNewsletter(
+            Guid id, [FromBody] SendNewsletterRequest request, CancellationToken ct)
+            => OkResponse(await Mediator.Send(new SendNewsletterCommand(id, request), ct));
     }
 }

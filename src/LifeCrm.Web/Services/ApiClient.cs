@@ -261,6 +261,22 @@ namespace LifeCrm.Web.Services
         public async Task<ApiResponse> DeleteCampaignAsync(Guid id)
             => await DeleteAsync($"api/v1/campaigns/{id}");
 
+
+        // ── Newsletter ───────────────────────────────────────────────────────────
+        public async Task<ApiResponse<NewsletterPreviewDto>> PreviewNewsletterAsync(
+            Guid campaignId, string? tagFilter = null)
+        {
+            var url = $"api/v1/campaigns/{campaignId}/newsletter/preview";
+            if (!string.IsNullOrWhiteSpace(tagFilter))
+                url += $"?tagFilter={Uri.EscapeDataString(tagFilter)}";
+            return await GetAsync<NewsletterPreviewDto>(url);
+        }
+
+        public async Task<ApiResponse<NewsletterResultDto>> SendNewsletterAsync(
+            Guid campaignId, SendNewsletterRequest request)
+            => await PostAsync<NewsletterResultDto>(
+                $"api/v1/campaigns/{campaignId}/newsletter/send", request);
+
         // ── PROJECTS ────────────────────────────────────────────────────────────
         public async Task<ApiResponse<PagedResult<ProjectListDto>>> GetProjectsAsync(PaginationParams p)
             => await GetAsync<PagedResult<ProjectListDto>>(
