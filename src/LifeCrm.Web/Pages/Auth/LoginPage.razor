@@ -4,6 +4,7 @@
 @inject NavigationManager Nav
 @inject SignalRService SignalR
 @inject Blazored.LocalStorage.ILocalStorageService Storage
+@inject IConfiguration Configuration
 
 <MudGrid Justify="Justify.Center" Class="mt-8">
     <MudItem xs="12" sm="6" md="4">
@@ -62,13 +63,19 @@
             AppState.SetUser(result.Data);
             await AppState.PersistAsync(Storage);
 
-            // FIXED: Do NOT await SignalR.ConnectAsync — it can take 1-3 seconds
-            // and would block the UI after a successful login. Fire-and-forget;
-            // MainLayout will detect the connected state and re-subscribe to events.
-            var baseUri  = Nav.BaseUri.TrimEnd('/');
-            var token    = result.Data.Token;
-            var orgId    = result.Data.OrganizationId;
-            _ = Task.Run(() => SignalR.ConnectAsync(baseUri, token, orgId));
+            // Use the same configured API URL as the HttpClient.
+            // In dev this is https://localhost:59152; in prod it matches the app host.
+            // Nav.BaseUri would be wrong in dev (points to :59153, the WASM dev server).
+            var apiBaseUrl = Configuration["ApiBaseUrl"];
+            var hubBaseUrl = !string.IsNullOrWhiteSpace(apiBaseUrl)
+                ? apiBaseUrl.TrimEnd('/')
+                : Nav.BaseUri.TrimEnd('/');
+
+            var token = result.Data.Token;
+            var orgId = result.Data.OrganizationId;
+
+            // Fire-and-forget — don't block navigation waiting for hub handshake
+            _ = Task.Run(() => SignalR.ConnectAsync(hubBaseUrl, token, orgId));
 
             Nav.NavigateTo("/");
         }

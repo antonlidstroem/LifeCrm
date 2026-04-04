@@ -1,3 +1,4 @@
+// LifeCrm.Web — Blazor WebAssembly entry point
 using Blazored.LocalStorage;
 using LifeCrm.Web.Services;
 using Microsoft.AspNetCore.Components.Web;
@@ -14,14 +15,31 @@ namespace LifeCrm.Web
             builder.RootComponents.Add<App>("#app");
             builder.RootComponents.Add<HeadOutlet>("head::after");
 
-            // FIXED: Use the host's base address for same-origin API requests.
-            // In development the API and WASM are served from the same host (API project
-            // serves the WASM files). This means BaseAddress == API origin, so all
-            // "api/v1/..." calls resolve correctly without hardcoding localhost ports.
+            // ── HTTP Client base address ─────────────────────────────────────
+            // The project has two valid hosting configurations:
+            //
+            //   DEVELOPMENT: Blazor WASM dev server on :59153, API on :59152.
+            //     The WASM app must send API requests to :59152 explicitly.
+            //     Set in wwwroot/appsettings.Development.json: { "ApiBaseUrl": "https://localhost:59152" }
+            //
+            //   PRODUCTION:  API serves both static files and API on the same host.
+            //     Relative URLs work — use BaseUri (same origin).
+            //     Set in wwwroot/appsettings.json: { "ApiBaseUrl": "" }
+            //
+            // Using navManager.BaseUri alone was WRONG for development because it
+            // returns the WASM dev server URL (:59153), not the API URL (:59152),
+            // causing every API call to return 405 Method Not Allowed.
+            var apiBaseUrl = builder.Configuration["ApiBaseUrl"];
+
             builder.Services.AddScoped(sp =>
             {
                 var navManager = sp.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>();
-                return new HttpClient { BaseAddress = new Uri(navManager.BaseUri) };
+                // Use configured API URL if set; fall back to same-origin (production).
+                var baseAddress = !string.IsNullOrWhiteSpace(apiBaseUrl)
+                    ? apiBaseUrl.TrimEnd('/') + "/"
+                    : navManager.BaseUri;
+
+                return new HttpClient { BaseAddress = new Uri(baseAddress) };
             });
 
             builder.Services.AddMudServices(cfg =>
@@ -35,8 +53,7 @@ namespace LifeCrm.Web
 
             builder.Services.AddBlazoredLocalStorage();
             builder.Services.AddScoped<ApiClient>();
-            // FIXED: AppState is Singleton so it survives Blazor component re-renders
-            // without losing in-memory state mid-session (e.g. during navigation).
+            // Singleton so AppState survives Blazor component re-renders during navigation
             builder.Services.AddSingleton<AppState>();
             builder.Services.AddScoped<SignalRService>();
 

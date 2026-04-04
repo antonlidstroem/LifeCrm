@@ -4,6 +4,7 @@
 @inject NavigationManager Nav
 @inject SignalRService SignalR
 @inject Blazored.LocalStorage.ILocalStorageService Storage
+@inject IConfiguration Configuration
 @inject ApiClient Api
 @implements IDisposable
 
@@ -110,10 +111,15 @@ else
         await AppState.TryRestoreAsync(Storage);
 
         // If authenticated (restored from storage), reconnect SignalR.
+        // Use the same ApiBaseUrl config as the HttpClient — Nav.BaseUri is wrong in dev
+        // because it points to the WASM dev server (:59153), not the API (:59152).
         if (AppState.IsAuthenticated && !SignalR.IsConnected && AppState.Token is not null)
         {
-            var baseUri = Nav.BaseUri.TrimEnd('/');
-            await SignalR.ConnectAsync(baseUri, AppState.Token, AppState.OrganizationId!);
+            var apiBaseUrl = Configuration["ApiBaseUrl"];
+            var hubBase    = !string.IsNullOrWhiteSpace(apiBaseUrl)
+                ? apiBaseUrl.TrimEnd('/')
+                : Nav.BaseUri.TrimEnd('/');
+            _ = Task.Run(() => SignalR.ConnectAsync(hubBase, AppState.Token, AppState.OrganizationId!));
         }
 
         _initializing = false;
