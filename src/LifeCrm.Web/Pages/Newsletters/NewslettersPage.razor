@@ -1,0 +1,182 @@
+@page "/newsletters"
+@inject ApiClient Api
+@inject AppState AppState
+@inject NavigationManager Nav
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudText Typo="Typo.h4">Nyhetsbrev</MudText>
+    <MudSpacer />
+    @if (AppState.CanWrite)
+    {
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.EditNote"
+                   OnClick="CreateDraft">
+            Nytt nyhetsbrev
+        </MudButton>
+    }
+</MudStack>
+
+@* ── Filter bar ── *@
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4" Spacing="2">
+    <MudChipSet T="string" @bind-SelectedValue="_statusFilter" SelectionMode="SelectionMode.SingleSelection">
+        <MudChip T="string" Value="@("")"     Variant="Variant.Outlined">Alla</MudChip>
+        <MudChip T="string" Value="@("Draft")" Variant="Variant.Outlined">Utkast</MudChip>
+        <MudChip T="string" Value="@("Sent")"  Variant="Variant.Outlined">Skickade</MudChip>
+    </MudChipSet>
+</MudStack>
+
+<MudTable T="NewsletterListDto"
+          ServerData="ServerReload"
+          @ref="_table"
+          Hover="true" Dense="true"
+          OnRowClick="@((TableRowClickEventArgs<NewsletterListDto> e) => OpenDetail(e.Item))">
+    <HeaderContent>
+        <MudTh>Titel</MudTh>
+        <MudTh>Ämne</MudTh>
+        <MudTh>Status</MudTh>
+        <MudTh>Skapad</MudTh>
+        <MudTh>Skickat</MudTh>
+        <MudTh>Mottagare</MudTh>
+        <MudTh Style="width:80px"></MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd>
+            <MudText Typo="Typo.body2"><b>@context.Title</b></MudText>
+        </MudTd>
+        <MudTd>
+            <MudText Typo="Typo.body2" Style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                @context.Subject
+            </MudText>
+        </MudTd>
+        <MudTd>
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Text"
+                     Color="@(context.Status == NewsletterStatus.Sent ? Color.Success : Color.Default)">
+                @(context.Status == NewsletterStatus.Sent ? "Skickat" : "Utkast")
+            </MudChip>
+        </MudTd>
+        <MudTd>@context.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd")</MudTd>
+        <MudTd>@(context.SentAt.HasValue ? context.SentAt.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm") : "—")</MudTd>
+        <MudTd>
+            @if (context.Status == NewsletterStatus.Sent)
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudText Typo="Typo.body2">@context.SentCount</MudText>
+                    @if (context.ErrorCount > 0)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Text">
+                            @context.ErrorCount fel
+                        </MudChip>
+                    }
+                </MudStack>
+            }
+            else { <MudText Color="Color.Secondary">—</MudText> }
+        </MudTd>
+        <MudTd @onclick:stopPropagation="true" Style="white-space:nowrap">
+            @if (context.Status == NewsletterStatus.Draft && AppState.CanWrite)
+            {
+                <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                               Size="Size.Small"
+                               OnClick="@(() => Nav.NavigateTo($"/newsletters/{context.Id}/edit"))" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                               Size="Size.Small" Color="Color.Error"
+                               OnClick="@(() => DeleteDraft(context))" />
+            }
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <EmptyState Title="Inga nyhetsbrev ännu"
+                    Icon="@Icons.Material.Outlined.MarkEmailRead"
+                    Description="Skapa ditt första nyhetsbrev.">
+            <ActionContent>
+                @if (AppState.CanWrite)
+                { <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="CreateDraft">Skapa nyhetsbrev</MudButton> }
+            </ActionContent>
+        </EmptyState>
+    </NoRecordsContent>
+    <LoadingContent><LoadingSkeleton Rows="5" /></LoadingContent>
+    <PagerContent><MudTablePager PageSizeOptions="new int[]{25,50}" /></PagerContent>
+</MudTable>
+
+@code {
+    private MudTable<NewsletterListDto>? _table;
+    private string _statusFilter = "";
+
+    // Re-load when chip filter changes
+    protected override void OnInitialized()
+    {
+        // Table auto-loads via ServerData
+    }
+
+    private async Task OnStatusFilterChanged(string value)
+    {
+        _statusFilter = value;
+        if (_table is not null) await _table.ReloadServerData();
+    }
+
+    private async Task<TableData<NewsletterListDto>> ServerReload(TableState state, CancellationToken ct)
+    {
+        NewsletterStatus? statusEnum = _statusFilter switch
+        {
+            "Draft" => NewsletterStatus.Draft,
+            "Sent"  => NewsletterStatus.Sent,
+            _       => null
+        };
+
+        var res = await Api.GetNewslettersAsync(
+            new PaginationParams { Page = state.Page + 1, PageSize = state.PageSize },
+            statusEnum);
+
+        var paged = res.Data;
+        return new TableData<NewsletterListDto>
+        {
+            Items      = paged?.Items ?? Array.Empty<NewsletterListDto>(),
+            TotalItems = paged?.TotalCount ?? 0
+        };
+    }
+
+    private async Task CreateDraft()
+    {
+        // Create a blank draft and navigate directly to the compose page
+        var res = await Api.CreateNewsletterAsync(new CreateNewsletterRequest
+        {
+            Title   = $"Nyhetsbrev {DateTime.Today:yyyy-MM-dd}",
+            Subject = "",
+            HtmlBody = ""
+        });
+
+        if (res.Success && res.Data != default)
+            Nav.NavigateTo($"/newsletters/{res.Data}/edit");
+        else
+            Snackbar.Add(res.Errors.FirstOrDefault() ?? "Kunde inte skapa utkast.", Severity.Error);
+    }
+
+    private void OpenDetail(NewsletterListDto nl)
+    {
+        if (nl.Status == NewsletterStatus.Draft)
+            Nav.NavigateTo($"/newsletters/{nl.Id}/edit");
+        else
+            Nav.NavigateTo($"/newsletters/{nl.Id}");
+    }
+
+    private async Task DeleteDraft(NewsletterListDto nl)
+    {
+        var p = new DialogParameters
+        {
+            ["Title"]   = "Ta bort utkast",
+            ["Message"] = $"Ta bort '{nl.Title}'? Det går inte att ångra."
+        };
+        var confirm = DialogService.Show<ConfirmDialog>("", p);
+        if ((await confirm.Result).Canceled) return;
+
+        var res = await Api.DeleteNewsletterAsync(nl.Id);
+        if (res.Success)
+        {
+            Snackbar.Add("Utkastet har tagits bort.", Severity.Success);
+            if (_table is not null) await _table.ReloadServerData();
+        }
+        else Snackbar.Add(res.Errors.FirstOrDefault() ?? "Fel.", Severity.Error);
+    }
+}

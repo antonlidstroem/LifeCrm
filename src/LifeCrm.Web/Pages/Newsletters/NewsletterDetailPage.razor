@@ -1,0 +1,125 @@
+@page "/newsletters/{Id:guid}"
+@inject ApiClient Api
+@inject NavigationManager Nav
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+}
+else if (_newsletter is not null)
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack"
+                       OnClick="@(() => Nav.NavigateTo("/newsletters"))" />
+        <MudText Typo="Typo.h5">@_newsletter.Title</MudText>
+        <MudSpacer />
+        <MudChip T="string" Color="Color.Success" Variant="Variant.Text" Size="Size.Small">Skickat</MudChip>
+    </MudStack>
+
+    <MudGrid Spacing="3">
+
+        @* ── Metadata sidebar ── *@
+        <MudItem xs="12" md="3">
+            <MudCard Elevation="2">
+                <MudCardContent>
+                    <MudList T="string" Dense="true">
+                        <MudListItem Icon="@Icons.Material.Filled.Subject">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Ämne</MudText>
+                            <MudText Typo="Typo.body2">@_newsletter.Subject</MudText>
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Schedule">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Skickat</MudText>
+                            <MudText Typo="Typo.body2">
+                                @(_newsletter.SentAt.HasValue
+                                    ? _newsletter.SentAt.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+                                    : "—")
+                            </MudText>
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Person">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Skickat av</MudText>
+                            <MudText Typo="Typo.body2">@(_newsletter.SentBy ?? "—")</MudText>
+                        </MudListItem>
+                    </MudList>
+
+                    <MudDivider Class="my-3" />
+
+                    @* Send stats *@
+                    <MudStack>
+                        <MudStack Row="true" Justify="Justify.SpaceBetween">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Skickade</MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Success"><b>@_newsletter.SentCount</b></MudText>
+                        </MudStack>
+                        @if (_newsletter.SkippedCount > 0)
+                        {
+                            <MudStack Row="true" Justify="Justify.SpaceBetween">
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Hoppade över</MudText>
+                                <MudText Typo="Typo.body2">@_newsletter.SkippedCount</MudText>
+                            </MudStack>
+                        }
+                        @if (_newsletter.ErrorCount > 0)
+                        {
+                            <MudStack Row="true" Justify="Justify.SpaceBetween">
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Misslyckades</MudText>
+                                <MudText Typo="Typo.body2" Color="Color.Warning">@_newsletter.ErrorCount</MudText>
+                            </MudStack>
+                        }
+                    </MudStack>
+
+                    @* Recipient filter used *@
+                    @if (!string.IsNullOrEmpty(_newsletter.TagFilter) ||
+                         !string.IsNullOrEmpty(_newsletter.ContactTypeFilter))
+                    {
+                        <MudDivider Class="my-3" />
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Filter som användes</MudText>
+                        @if (!string.IsNullOrEmpty(_newsletter.TagFilter))
+                        {
+                            <MudText Typo="Typo.caption">Taggar: @_newsletter.TagFilter</MudText>
+                        }
+                        @if (!string.IsNullOrEmpty(_newsletter.ContactTypeFilter))
+                        {
+                            <MudText Typo="Typo.caption">Typer: @_newsletter.ContactTypeFilter</MudText>
+                        }
+                    }
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+        @* ── Email body render ── *@
+        <MudItem xs="12" md="9">
+            <MudCard Elevation="2">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.subtitle1">E-postinnehåll</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">
+                        Ämne: @_newsletter.Subject
+                    </MudText>
+                    <MudDivider Class="mb-3" />
+                    <div style="font-family:sans-serif;font-size:15px;color:#222;line-height:1.6;">
+                        @((MarkupString)_newsletter.HtmlBody)
+                    </div>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+    private NewsletterDetailDto? _newsletter;
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var res = await Api.GetNewsletterAsync(Id);
+        _newsletter = res.Data;
+
+        // If it's still a draft, redirect to edit page
+        if (_newsletter?.Status == NewsletterStatus.Draft)
+            Nav.NavigateTo($"/newsletters/{Id}/edit");
+
+        _loading = false;
+    }
+}

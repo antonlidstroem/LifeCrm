@@ -1,0 +1,529 @@
+@page "/newsletters/{Id:guid}/edit"
+@implements IDisposable
+@inject ApiClient Api
+@inject AppState AppState
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack"
+                       OnClick="@(() => Nav.NavigateTo("/newsletters"))" />
+        <MudText Typo="Typo.h5">@(_isDirty ? "✎ " : "")@_title</MudText>
+        <MudSpacer />
+        @if (_saving)
+        { <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mr-3">Sparar…</MudText> }
+        else if (_lastSaved.HasValue)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mr-3">
+                Sparad @_lastSaved.Value.ToString("HH:mm:ss")
+            </MudText>
+        }
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Send"
+                   OnClick="OpenSendPanel"
+                   Disabled="@(string.IsNullOrWhiteSpace(_subject) || string.IsNullOrWhiteSpace(_htmlBody))">
+            Skicka nyhetsbrev
+        </MudButton>
+    </MudStack>
+
+    <MudGrid Spacing="3">
+
+        @* ── Left column: fields + Quill editor + attachments ── *@
+        <MudItem xs="12" md="8">
+            <MudCard Elevation="2" Class="mb-3">
+                <MudCardContent>
+                    <MudGrid Spacing="2">
+                        <MudItem xs="12">
+                            <MudTextField @bind-Value="_title" Label="Intern titel"
+                                          Variant="Variant.Outlined"
+                                          HelperText="Visas bara internt — inte i e-posten"
+                                          Immediate="true" TextChanged="OnFieldChanged" />
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudTextField @bind-Value="_subject" Label="Ämnesrad *"
+                                          Variant="Variant.Outlined"
+                                          HelperText="Visas i mottagarens inbox"
+                                          Immediate="true" TextChanged="OnFieldChanged" />
+                        </MudItem>
+                    </MudGrid>
+                </MudCardContent>
+            </MudCard>
+
+            @* ── Phase 3: Quill WYSIWYG editor ── *@
+            <MudCard Elevation="2" Class="mb-3">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudStack Row="true" AlignItems="AlignItems.Center">
+                            <MudText Typo="Typo.subtitle1">Innehåll *</MudText>
+                            <MudSpacer />
+                            <MudChipSet T="string" @bind-SelectedValue="_editorMode"
+                                        SelectionMode="SelectionMode.SingleSelection">
+                                <MudChip T="string" Value="@("visual")" Size="Size.Small">Visuell</MudChip>
+                                <MudChip T="string" Value="@("html")"   Size="Size.Small">HTML</MudChip>
+                            </MudChipSet>
+                        </MudStack>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    @if (_editorMode == "visual")
+                    {
+                        @* Quill container — rendered after JS is available *@
+                        <div id="quill-editor"
+                             style="min-height:300px;font-size:15px;font-family:sans-serif;">
+                        </div>
+                    }
+                    else
+                    {
+                        @* Raw HTML fallback *@
+                        <MudTextField @bind-Value="_htmlBody"
+                                      Variant="Variant.Outlined" Lines="18"
+                                      Placeholder="&lt;p&gt;Hej!&lt;/p&gt;"
+                                      Immediate="true" TextChanged="OnFieldChanged"
+                                      Style="font-family:monospace;font-size:13px" />
+                    }
+                </MudCardContent>
+            </MudCard>
+
+            @* ── Phase 2: Attachments panel ── *@
+            <MudCard Elevation="2">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudStack Row="true" AlignItems="AlignItems.Center">
+                            <MudText Typo="Typo.subtitle1">
+                                <MudIcon Icon="@Icons.Material.Filled.Attachment"
+                                         Class="mr-1 mb-n1" Size="Size.Small" />
+                                Bilagor (@_attachments.Count)
+                            </MudText>
+                        </MudStack>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">
+                        PDF max 10 MB · Bilder (JPEG, PNG, GIF, WebP) max 3 MB vardera · Max 3 bilder
+                    </MudText>
+
+                    @* Existing attachments *@
+                    @foreach (var att in _attachments)
+                    {
+                        <MudPaper Elevation="0" Class="pa-2 mb-1 d-flex align-center"
+                                  Style="border:1px solid var(--mud-palette-divider);border-radius:4px">
+                            <MudIcon Icon="@AttachmentIcon(att.ContentType)"
+                                     Size="Size.Small" Class="mr-2" />
+                            <MudText Typo="Typo.body2" Style="flex:1">
+                                @att.FileName
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Inline="true">
+                                    (@(att.FileSizeBytes / 1024) KB)
+                                </MudText>
+                            </MudText>
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                           Size="Size.Small" Color="Color.Error"
+                                           OnClick="@(() => RemoveAttachment(att.Id))" />
+                        </MudPaper>
+                    }
+
+                    @* Upload control *@
+                    <MudFileUpload T="IBrowserFile"
+                                   FilesChanged="OnFileSelected"
+                                   Accept=".pdf,.jpg,.jpeg,.png,.gif,.webp"
+                                   MaximumFileCount="1">
+                        <ActivatorContent>
+                            <MudButton Variant="Variant.Outlined"
+                                       StartIcon="@Icons.Material.Filled.Upload"
+                                       Disabled="_uploading" Class="mt-2">
+                                @(_uploading ? "Laddar upp…" : "Välj fil")
+                            </MudButton>
+                        </ActivatorContent>
+                    </MudFileUpload>
+
+                    @if (!string.IsNullOrEmpty(_uploadError))
+                    {
+                        <MudAlert Severity="Severity.Error" Dense="true" Class="mt-2">
+                            @_uploadError
+                        </MudAlert>
+                    }
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+        @* ── Right column: live preview + send panel ── *@
+        <MudItem xs="12" md="4">
+
+            @* Live preview *@
+            <MudCard Elevation="2" Class="mb-3">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.subtitle1">
+                            <MudIcon Icon="@Icons.Material.Outlined.Preview"
+                                     Class="mr-1 mb-n1" Size="Size.Small" />
+                            Förhandsgranskning
+                        </MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent Style="max-height:440px;overflow-y:auto;">
+                    @if (!string.IsNullOrWhiteSpace(_subject))
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            Ämne: @_subject
+                        </MudText>
+                        <MudDivider Class="my-2" />
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_htmlBody))
+                    {
+                        <div style="font-family:sans-serif;font-size:14px;color:#222;line-height:1.6">
+                            @((MarkupString)_htmlBody)
+                        </div>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">
+                            Börja skriva så visas förhandsgranskningen här.
+                        </MudText>
+                    }
+                </MudCardContent>
+            </MudCard>
+
+            @* Send panel *@
+            @if (_sendPanelOpen)
+            {
+                <MudCard Elevation="4"
+                         Style="border:2px solid var(--mud-palette-primary)">
+                    <MudCardHeader>
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.subtitle1" Color="Color.Primary">
+                                <MudIcon Icon="@Icons.Material.Filled.Send"
+                                         Class="mr-1 mb-n1" Size="Size.Small" />
+                                Skicka till mottagare
+                            </MudText>
+                        </CardHeaderContent>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        <MudGrid Spacing="2">
+                            <MudItem xs="12">
+                                <MudTextField @bind-Value="_tagFilter"
+                                              Label="Taggar (valfritt)"
+                                              Variant="Variant.Outlined"
+                                              HelperText="Kommaseparerade — kontakten måste ha alla"
+                                              Immediate="true" DebounceInterval="500"
+                                              TextChanged="@(_ => InvokeAsync(LoadPreview))" />
+                            </MudItem>
+                            <MudItem xs="12">
+                                <MudSelect T="string" MultiSelection="true"
+                                           @bind-SelectedValues="_selectedContactTypes"
+                                           Label="Kontakttyper (valfritt)"
+                                           Variant="Variant.Outlined"
+                                           HelperText="Tom = alla typer"
+                                           ValuesChanged="@(_ => InvokeAsync(LoadPreview))">
+                                    <MudSelectItem Value="@("Individual")">Privatperson</MudSelectItem>
+                                    <MudSelectItem Value="@("Organization")">Organisation</MudSelectItem>
+                                    <MudSelectItem Value="@("Church")">Kyrka</MudSelectItem>
+                                    <MudSelectItem Value="@("Foundation")">Stiftelse</MudSelectItem>
+                                </MudSelect>
+                            </MudItem>
+                            <MudItem xs="12">
+                                @if (_previewing)
+                                { <MudSkeleton SkeletonType="SkeletonType.Text" Width="180px" /> }
+                                else if (_preview is not null)
+                                {
+                                    <MudPaper Elevation="0" Class="pa-3"
+                                              Style="background:var(--mud-palette-background-grey)">
+                                        <MudText Typo="Typo.body1">
+                                            <b>@_preview.EligibleCount</b> mottagare
+                                        </MudText>
+                                        @if (_preview.OptedOutCount > 0)
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Warning">
+                                                @_preview.OptedOutCount avsagda hoppas över
+                                            </MudText>
+                                        }
+                                        @if (_preview.NoEmailCount > 0)
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Default">
+                                                @_preview.NoEmailCount saknar e-postadress
+                                            </MudText>
+                                        }
+                                    </MudPaper>
+                                }
+                            </MudItem>
+                        </MudGrid>
+                    </MudCardContent>
+                    <MudCardActions Class="px-4 pb-4 flex-column" Style="gap:8px">
+                        @if (_sendResult is null)
+                        {
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                                       FullWidth="true"
+                                       StartIcon="@Icons.Material.Filled.Send"
+                                       OnClick="ConfirmSend"
+                                       Disabled="@(_sending || _preview?.EligibleCount == 0)">
+                                @if (_sending)
+                                {
+                                    <MudProgressCircular Size="Size.Small"
+                                                         Indeterminate="true" Class="mr-2" />
+                                    <span>Skickar…</span>
+                                }
+                                else
+                                { <span>Skicka till @(_preview?.EligibleCount ?? 0) kontakter</span> }
+                            </MudButton>
+                            <MudButton Variant="Variant.Text" FullWidth="true" OnClick="CloseSendPanel">
+                                Avbryt
+                            </MudButton>
+                        }
+                        else
+                        {
+                            <MudAlert Severity="@(_sendResult.ErrorCount == 0 ? Severity.Success : Severity.Warning)"
+                                      Dense="true" Class="mb-2">
+                                Skickat till @_sendResult.SentCount mottagare.
+                                @if (_sendResult.ErrorCount > 0)
+                                { <text> @_sendResult.ErrorCount misslyckades.</text> }
+                            </MudAlert>
+                            <MudButton Variant="Variant.Outlined" FullWidth="true"
+                                       OnClick="@(() => Nav.NavigateTo("/newsletters"))">
+                                Tillbaka till listan
+                            </MudButton>
+                        }
+                    </MudCardActions>
+                </MudCard>
+            }
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    // Content fields
+    private string _title    = string.Empty;
+    private string _subject  = string.Empty;
+    private string _htmlBody = string.Empty;
+    private string _editorMode = "visual";
+
+    // Attachment state (Phase 2)
+    private List<AttachmentDto> _attachments  = new();
+    private bool                _uploading    = false;
+    private string              _uploadError  = string.Empty;
+
+    // Send panel state
+    private bool                     _sendPanelOpen        = false;
+    private string                   _tagFilter            = string.Empty;
+    private IEnumerable<string>      _selectedContactTypes = Array.Empty<string>();
+    private NewsletterPreviewDto?    _preview;
+    private bool                     _previewing;
+    private bool                     _sending;
+    private NewsletterSendResultDto? _sendResult;
+
+    // Auto-save state
+    private bool     _loading   = true;
+    private bool     _saving    = false;
+    private bool     _isDirty   = false;
+    private DateTime? _lastSaved;
+    private System.Timers.Timer? _saveTimer;
+
+    // Phase 3: Quill interop
+    private DotNetObjectReference<NewsletterComposePage>? _dotNetRef;
+    private bool _quillInitialized = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var res = await Api.GetNewsletterAsync(Id);
+        if (res.Data is null) { Nav.NavigateTo("/newsletters"); return; }
+
+        var nl = res.Data;
+        if (nl.Status == NewsletterStatus.Sent)
+        {
+            Nav.NavigateTo($"/newsletters/{Id}");
+            return;
+        }
+
+        _title       = nl.Title;
+        _subject     = nl.Subject;
+        _htmlBody    = nl.HtmlBody;
+        _attachments = nl.Attachments.ToList();
+        _loading     = false;
+
+        // Debounced auto-save timer — fires on thread pool, uses InvokeAsync
+        _saveTimer = new System.Timers.Timer(2000) { AutoReset = false };
+        _saveTimer.Elapsed += async (_, _) => await InvokeAsync(AutoSave);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Phase 3: init Quill after first render when element is in DOM
+        if (!_loading && _editorMode == "visual" && !_quillInitialized)
+        {
+            _dotNetRef = DotNetObjectReference.Create(this);
+            try
+            {
+                await JS.InvokeVoidAsync("quillInterop.init",
+                    "quill-editor", _htmlBody, _dotNetRef);
+                _quillInitialized = true;
+            }
+            catch (JSException)
+            {
+                // Quill not loaded (e.g. CDN blocked) — fall back to HTML mode silently
+                _editorMode = "html";
+                StateHasChanged();
+            }
+        }
+    }
+
+    /// <summary>Called from Quill JS interop when the editor content changes.</summary>
+    [JSInvokable]
+    public void OnQuillChanged(string html)
+    {
+        _htmlBody = html;
+        _isDirty  = true;
+        _saveTimer?.Stop();
+        _saveTimer?.Start();
+    }
+
+    private void OnFieldChanged(string _)
+    {
+        _isDirty = true;
+        _saveTimer?.Stop();
+        _saveTimer?.Start();
+        StateHasChanged();
+    }
+
+    private async Task AutoSave()
+    {
+        if (!_isDirty || _saving) return;
+        _saving = true;
+        StateHasChanged();
+
+        var res = await Api.UpdateNewsletterAsync(Id, new UpdateNewsletterRequest
+        {
+            Id       = Id,
+            Title    = _title,
+            Subject  = _subject,
+            HtmlBody = _htmlBody
+        });
+
+        _saving    = false;
+        _isDirty   = false;
+        _lastSaved = res.Success ? DateTime.Now : _lastSaved;
+        StateHasChanged();
+    }
+
+    // ── Phase 2: Attachments ─────────────────────────────────────────────────
+
+    private async Task OnFileSelected(IBrowserFile file)
+    {
+        _uploadError = string.Empty;
+
+        // Client-side size guard before uploading
+        const long maxPdf   = 10 * 1024 * 1024;
+        const long maxImage =  3 * 1024 * 1024;
+        var isPdf    = file.ContentType == "application/pdf";
+        var isImage  = file.ContentType.StartsWith("image/");
+        var maxBytes = isPdf ? maxPdf : isImage ? maxImage : 0;
+
+        if (maxBytes == 0)
+        {
+            _uploadError = "Filtypen stöds inte. Ladda upp PDF eller bild (JPEG, PNG, GIF, WebP).";
+            return;
+        }
+        if (file.Size > maxBytes)
+        {
+            _uploadError = $"Filen är för stor. Max {maxBytes / 1024 / 1024} MB för denna filtyp.";
+            return;
+        }
+
+        _uploading = true;
+        StateHasChanged();
+        try
+        {
+            await using var stream = file.OpenReadStream(maxBytes);
+            var res = await Api.UploadNewsletterAttachmentAsync(Id, stream, file.Name, file.ContentType);
+            if (res.Success && res.Data is not null)
+            {
+                _attachments.Add(res.Data);
+                Snackbar.Add($"{file.Name} uppladdad.", Severity.Success);
+            }
+            else
+            {
+                _uploadError = res.Errors.FirstOrDefault() ?? "Uppladdningen misslyckades.";
+            }
+        }
+        finally
+        {
+            _uploading = false;
+        }
+    }
+
+    private async Task RemoveAttachment(Guid attachmentId)
+    {
+        var res = await Api.DeleteNewsletterAttachmentAsync(Id, attachmentId);
+        if (res.Success)
+            _attachments.RemoveAll(a => a.Id == attachmentId);
+        else
+            Snackbar.Add(res.Errors.FirstOrDefault() ?? "Fel.", Severity.Error);
+    }
+
+    private static string AttachmentIcon(string contentType) => contentType switch
+    {
+        "application/pdf" => Icons.Material.Filled.PictureAsPdf,
+        var t when t.StartsWith("image/") => Icons.Material.Filled.Image,
+        _ => Icons.Material.Filled.AttachFile
+    };
+
+    // ── Send panel ───────────────────────────────────────────────────────────
+
+    private async Task OpenSendPanel()
+    {
+        if (_isDirty) await AutoSave();
+        _sendPanelOpen = true;
+        await LoadPreview();
+    }
+
+    private void CloseSendPanel() { _sendPanelOpen = false; _sendResult = null; }
+
+    private async Task LoadPreview()
+    {
+        _previewing = true;
+        StateHasChanged();
+        var ctFilter = _selectedContactTypes.Any()
+            ? string.Join(',', _selectedContactTypes) : null;
+        var res = await Api.PreviewNewsletterRecipientsAsync(_tagFilter.NullIfEmpty(), ctFilter);
+        _preview    = res.Data;
+        _previewing = false;
+        StateHasChanged();
+    }
+
+    private async Task ConfirmSend()
+    {
+        _sending = true;
+        var ctFilter = _selectedContactTypes.Any()
+            ? string.Join(',', _selectedContactTypes) : null;
+
+        var res = await Api.SendNewsletterAsync(Id, new SendNewsletterRequest
+        {
+            TagFilter         = _tagFilter.NullIfEmpty(),
+            ContactTypeFilter = ctFilter
+        });
+
+        _sending = false;
+        if (res.Success)
+        {
+            _sendResult = res.Data;
+            Snackbar.Add(
+                $"Nyhetsbrevet skickades till {_sendResult!.SentCount} mottagare.",
+                _sendResult.ErrorCount == 0 ? Severity.Success : Severity.Warning);
+        }
+        else Snackbar.Add(res.Errors.FirstOrDefault() ?? "Sändning misslyckades.", Severity.Error);
+    }
+
+    public void Dispose()
+    {
+        _saveTimer?.Stop();
+        _saveTimer?.Dispose();
+        if (_quillInitialized)
+            JS.InvokeVoidAsync("quillInterop.destroy", "quill-editor");
+        _dotNetRef?.Dispose();
+    }
+}

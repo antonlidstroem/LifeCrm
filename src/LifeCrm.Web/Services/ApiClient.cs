@@ -14,6 +14,7 @@ using LifeCrm.Application.Interactions.DTOs;
 using LifeCrm.Application.Projects.DTOs;
 using LifeCrm.Application.Users.DTOs;
 using LifeCrm.Core.Enums;
+        using LifeCrm.Application.Newsletters.DTOs;
 using Microsoft.JSInterop;
 
 namespace LifeCrm.Web.Services
@@ -262,20 +263,72 @@ namespace LifeCrm.Web.Services
             => await DeleteAsync($"api/v1/campaigns/{id}");
 
 
-        // ── Newsletter ───────────────────────────────────────────────────────────
-        public async Task<ApiResponse<NewsletterPreviewDto>> PreviewNewsletterAsync(
-            Guid campaignId, string? tagFilter = null)
+        // ── NEWSLETTERS ──────────────────────────────────────────────────────────
+
+        public async Task<ApiResponse<PagedResult<NewsletterListDto>>> GetNewslettersAsync(
+            PaginationParams p, NewsletterStatus? status = null)
         {
-            var url = $"api/v1/campaigns/{campaignId}/newsletter/preview";
+            var url = $"api/v1/newsletters?page={p.Page}&pageSize={p.PageSize}";
+            if (status.HasValue) url += $"&status={status.Value}";
+            return await GetAsync<PagedResult<NewsletterListDto>>(url);
+        }
+
+        public async Task<ApiResponse<NewsletterDetailDto>> GetNewsletterAsync(Guid id)
+            => await GetAsync<NewsletterDetailDto>($"api/v1/newsletters/{id}");
+
+        public async Task<ApiResponse<Guid>> CreateNewsletterAsync(CreateNewsletterRequest req)
+            => await PostAsync<Guid>("api/v1/newsletters", req);
+
+        public async Task<ApiResponse> UpdateNewsletterAsync(Guid id, UpdateNewsletterRequest req)
+            => await PutAsync($"api/v1/newsletters/{id}", req);
+
+        public async Task<ApiResponse> DeleteNewsletterAsync(Guid id)
+            => await DeleteAsync($"api/v1/newsletters/{id}");
+
+        public async Task<ApiResponse<NewsletterPreviewDto>> PreviewNewsletterRecipientsAsync(
+            string? tagFilter, string? contactTypeFilter)
+        {
+            var url = "api/v1/newsletters/recipients/preview";
+            var qs  = new List<string>();
             if (!string.IsNullOrWhiteSpace(tagFilter))
-                url += $"?tagFilter={Uri.EscapeDataString(tagFilter)}";
+                qs.Add($"tagFilter={Uri.EscapeDataString(tagFilter)}");
+            if (!string.IsNullOrWhiteSpace(contactTypeFilter))
+                qs.Add($"contactTypeFilter={Uri.EscapeDataString(contactTypeFilter)}");
+            if (qs.Any()) url += "?" + string.Join("&", qs);
             return await GetAsync<NewsletterPreviewDto>(url);
         }
 
-        public async Task<ApiResponse<NewsletterResultDto>> SendNewsletterAsync(
-            Guid campaignId, SendNewsletterRequest request)
-            => await PostAsync<NewsletterResultDto>(
-                $"api/v1/campaigns/{campaignId}/newsletter/send", request);
+        public async Task<ApiResponse<NewsletterSendResultDto>> SendNewsletterAsync(
+            Guid id, SendNewsletterRequest req)
+            => await PostAsync<NewsletterSendResultDto>($"api/v1/newsletters/{id}/send", req);
+
+        // Phase 2: Attachment methods
+
+        public async Task<ApiResponse<AttachmentDto>> UploadNewsletterAttachmentAsync(
+            Guid newslId, Stream fileStream, string fileName, string contentType)
+        {
+            await AttachTokenAsync();
+            try
+            {
+                using var ms = new MemoryStream();
+                await fileStream.CopyToAsync(ms);
+                var content = new MultipartFormDataContent();
+                var fileContent = new ByteArrayContent(ms.ToArray());
+                fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
+                content.Add(fileContent, "file", fileName);
+                var resp = await _http.PostAsync($"api/v1/newsletters/{newslId}/attachments", content);
+                return await resp.Content.ReadFromJsonAsync<ApiResponse<AttachmentDto>>(_jsonOpts)
+                    ?? ApiResponse<AttachmentDto>.Fail("Upload failed.");
+            }
+            catch (Exception ex) { return ApiResponse<AttachmentDto>.Fail(ex.Message); }
+        }
+
+        public async Task<ApiResponse> DeleteNewsletterAttachmentAsync(Guid newslId, Guid attachmentId)
+            => await DeleteAsync($"api/v1/newsletters/{newslId}/attachments/{attachmentId}");
+
+        public async Task<ApiResponse> DownloadNewsletterAttachmentAsync(Guid newslId, Guid attachmentId, string fileName)
+            => await DownloadFileAsync(
+                $"api/v1/newsletters/{newslId}/attachments/{attachmentId}/download", fileName);
 
         // ── PROJECTS ────────────────────────────────────────────────────────────
         public async Task<ApiResponse<PagedResult<ProjectListDto>>> GetProjectsAsync(PaginationParams p)

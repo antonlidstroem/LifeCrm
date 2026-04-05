@@ -15,8 +15,12 @@ namespace LifeCrm.Infrastructure.Services
         public EmailService(IConfiguration config, ILogger<EmailService> logger)
         { _config = config; _logger = logger; }
 
-        public async Task SendAsync(string toEmail, string toName, string subject,
-            string htmlBody, byte[]? attachmentBytes = null, string? attachmentName = null,
+        public async Task SendAsync(
+            string  toEmail,
+            string  toName,
+            string  subject,
+            string  htmlBody,
+            IEnumerable<EmailAttachment>? attachments = null,
             CancellationToken ct = default)
         {
             var section = _config.GetSection("Email");
@@ -24,7 +28,9 @@ namespace LifeCrm.Infrastructure.Services
 
             if (dryRun)
             {
-                _logger.LogInformation("[Email DryRun] To={To} Subject={Subject}", toEmail, subject);
+                _logger.LogInformation(
+                    "[Email DryRun] To={To} Subject={Subject} Attachments={Count}",
+                    toEmail, subject, attachments?.Count() ?? 0);
                 return;
             }
 
@@ -34,13 +40,24 @@ namespace LifeCrm.Infrastructure.Services
             message.Subject = subject;
 
             var builder = new BodyBuilder { HtmlBody = htmlBody };
-            if (attachmentBytes is not null && !string.IsNullOrEmpty(attachmentName))
-                builder.Attachments.Add(attachmentName, attachmentBytes, ContentType.Parse("application/pdf"));
+
+            if (attachments is not null)
+            {
+                foreach (var att in attachments)
+                {
+                    builder.Attachments.Add(
+                        att.FileName,
+                        att.Bytes,
+                        ContentType.Parse(att.ContentType));
+                }
+            }
 
             message.Body = builder.ToMessageBody();
 
             using var client = new SmtpClient();
-            await client.ConnectAsync(section["Host"], int.Parse(section["Port"] ?? "587"),
+            await client.ConnectAsync(
+                section["Host"],
+                int.Parse(section["Port"] ?? "587"),
                 SecureSocketOptions.StartTls, ct);
             await client.AuthenticateAsync(section["Username"], section["Password"], ct);
             await client.SendAsync(message, ct);

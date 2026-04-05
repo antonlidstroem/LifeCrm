@@ -9,12 +9,14 @@ namespace LifeCrm.Core.Interfaces
 
     public interface IUnitOfWork : IDisposable
     {
-        IRepository<Contact>     Contacts     { get; }
-        IRepository<Donation>    Donations    { get; }
-        ICampaignRepository      Campaigns    { get; }
-        IRepository<Project>     Projects     { get; }
-        IRepository<Interaction> Interactions { get; }
-        IInteractionRepository   InteractionRepo { get; }
+        IRepository<Contact>               Contacts              { get; }
+        IRepository<Donation>              Donations             { get; }
+        ICampaignRepository                Campaigns             { get; }
+        IRepository<Project>               Projects              { get; }
+        IRepository<Interaction>           Interactions          { get; }
+        IInteractionRepository             InteractionRepo       { get; }
+        IRepository<Newsletter>            Newsletters           { get; }
+        IRepository<NewsletterAttachment>  NewsletterAttachments { get; }  // Phase 2
         Task<int> SaveChangesAsync(CancellationToken ct = default);
     }
 

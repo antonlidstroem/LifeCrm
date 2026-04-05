@@ -75,7 +75,8 @@ namespace LifeCrm.Application.Documents.Commands
                         contact.Email, contact.Name,
                         $"Donation Receipt from {org.Name}",
                         $"<p>Dear {contact.Name},</p><p>Thank you for your donation of ${donation.Amount:N2}.</p>",
-                        pdfBytes, fileName, ct);
+                        new[] { new Core.Interfaces.EmailAttachment(pdfBytes, fileName, "application/pdf") },
+                        ct);
                 }
                 catch { /* email failure must not invalidate the receipt */ }
             }
@@ -166,7 +167,8 @@ namespace LifeCrm.Application.Documents.Commands
                         contact.Email, contact.Name,
                         $"Donation Summary from {org.Name}",
                         "<p>Please find your donation summary attached.</p>",
-                        bytes, fn, ct);
+                        new[] { new Core.Interfaces.EmailAttachment(bytes, fn, "application/pdf") },
+                        ct);
                 }
                 catch { }
             }
